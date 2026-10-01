@@ -1,0 +1,9 @@
+// Cloudflare Workers config: an assets-only Worker, no server code.
+// Everything in ./public is served as-is.
+{
+  "name": "khush-sh",
+  "compatibility_date": "2026-09-30",
+  "assets": {
+    "directory": "./public"
+  }
+}

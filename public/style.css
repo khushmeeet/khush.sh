@@ -1,0 +1,314 @@
+/* ==========================================================
+   Palettes: one per season, each with a dark version.
+   season.js sets <html data-season="…">. Autumn is the
+   default, so it's also what shows without JavaScript.
+   --dot-alpha balances how strong the dots look per palette.
+   ========================================================== */
+
+:root {
+  --ground: #e8eadb;
+  --ink: #1e2314;
+  --ink-2: #50573f;
+  --cell: #6f8436;
+  --link: #4f6320;
+  --dot-alpha: 0.46;
+}
+html[data-season="winter"] {
+  --ground: #e4eaee;
+  --ink: #152029;
+  --ink-2: #485866;
+  --cell: #6f93b3;
+  --link: #34607f;
+  --dot-alpha: 0.5;
+}
+html[data-season="spring"] {
+  --ground: #e7eedb;
+  --ink: #1a2412;
+  --ink-2: #4d5a3f;
+  --cell: #c49a24;
+  --link: #6b5a10;
+  --dot-alpha: 0.55;
+}
+html[data-season="summer"] {
+  --ground: #f3eed3;
+  --ink: #26220f;
+  --ink-2: #5b5536;
+  --cell: #cc9a0e;
+  --link: #7d5f00;
+  --dot-alpha: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #141810;
+    --ink: #e4e7d6;
+    --ink-2: #a4ab8e;
+    --cell: #9bb068;
+    --link: #b8cc85;
+    --dot-alpha: 0.42;
+  }
+  html[data-season="winter"] {
+    --ground: #11161c;
+    --ink: #dde5ec;
+    --ink-2: #9aa8b5;
+    --cell: #8fb0cc;
+    --link: #a9c6e0;
+    --dot-alpha: 0.42;
+  }
+  html[data-season="spring"] {
+    --ground: #141a12;
+    --ink: #e6eadb;
+    --ink-2: #a7ae98;
+    --cell: #d9b24a;
+    --link: #e8c86a;
+    --dot-alpha: 0.44;
+  }
+  html[data-season="summer"] {
+    --ground: #1a1810;
+    --ink: #efe9cf;
+    --ink-2: #b3ab88;
+    --cell: #f0c93a;
+    --link: #f5d76a;
+    --dot-alpha: 0.42;
+  }
+}
+
+/* ==========================================================
+   Base
+   ========================================================== */
+
+:root {
+  color-scheme: light dark;
+  --line: color-mix(in srgb, var(--ink) 14%, transparent);
+  --line-strong: color-mix(in srgb, var(--ink) 34%, transparent);
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ground);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding:
+    env(safe-area-inset-top, 0px)
+    clamp(1.25rem, 4vw, 3rem)
+    calc(6rem + env(safe-area-inset-bottom, 0px));
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--cell);
+  color: var(--ground);
+}
+
+/* ==========================================================
+   The Game of Life, fixed behind everything
+   ========================================================== */
+
+#life {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ==========================================================
+   Content column
+   ========================================================== */
+
+.panel {
+  position: relative;
+  max-width: 42rem;
+  margin: clamp(2.5rem, 9vh, 6rem) auto 0;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  /* No box behind the text: a soft halo in the page color keeps letters crisp over the dots. */
+  text-shadow: 0 0 2px var(--ground), 0 0 6px var(--ground), 0 0 12px var(--ground);
+}
+
+/* Header */
+
+.head h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.2rem, 6vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.intro {
+  margin-top: 0.75rem;
+  font-size: 1.05rem;
+}
+
+.social {
+  display: flex;
+  gap: 0.15rem;
+  margin: 0.6rem 0 0 -12px; /* lines the first icon up with the text */
+}
+
+.social a {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--ink-2);
+  transition: color 0.2s;
+}
+
+.social a:hover {
+  color: var(--link);
+}
+
+.icon {
+  width: 1.3rem;
+  height: 1.3rem;
+  fill: currentColor;
+}
+
+/* Sections */
+
+.sec {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.sec h2 {
+  margin: 0 0 0.6rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+/* Rows: a label column on the left, details on the right */
+
+.row {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  column-gap: 1.25rem;
+  padding: 0.45rem 0;
+}
+
+.when {
+  padding-top: 0.15rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.row h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.role {
+  margin-left: 0.4rem;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+
+.row h3 + p {
+  margin-top: 0.2rem;
+}
+
+.project h3 {
+  padding-top: 0.05rem;
+  font-size: 1.15rem;
+}
+
+.colophon {
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+
+/* ==========================================================
+   Pause button and icon sprite
+   ========================================================== */
+
+.pause {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  min-height: 44px;
+  padding: 0 1rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  background: var(--ground);
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+
+.pause:hover {
+  color: var(--ink);
+}
+
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ==========================================================
+   Small screens: stack the label above the details
+   ========================================================== */
+
+@media (max-width: 34rem) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.5rem 0;
+  }
+
+  .when {
+    padding-top: 0;
+  }
+
+  .role {
+    display: block;
+    margin: 0.1rem 0 0;
+  }
+}
