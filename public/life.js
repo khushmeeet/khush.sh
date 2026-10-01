@@ -256,8 +256,9 @@
   });
 
   function syncPause() {
-    pauseButton.textContent = running ? 'Pause' : 'Play';
+    pauseButton.querySelector('use').setAttribute('href', running ? '#icon-pause' : '#icon-play');
     pauseButton.setAttribute('aria-label', running ? 'Pause the background animation' : 'Play the background animation');
+    pauseButton.title = running ? 'Pause animation' : 'Play animation';
   }
   if (pauseButton) {
     pauseButton.addEventListener('click', () => { running = !running; syncPause(); });
