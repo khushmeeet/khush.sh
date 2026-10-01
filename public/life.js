@@ -256,9 +256,11 @@
   });
 
   function syncPause() {
-    pauseButton.querySelector('use').setAttribute('href', running ? '#icon-pause' : '#icon-play');
     pauseButton.setAttribute('aria-label', running ? 'Pause the background animation' : 'Play the background animation');
     pauseButton.title = running ? 'Pause animation' : 'Play animation';
+    // Swap the icon if the button has one; never let a markup mismatch stop the animation.
+    const icon = pauseButton.querySelector('use');
+    if (icon) icon.setAttribute('href', running ? '#icon-pause' : '#icon-play');
   }
   if (pauseButton) {
     pauseButton.addEventListener('click', () => { running = !running; syncPause(); });
