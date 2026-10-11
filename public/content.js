@@ -1,9 +1,17 @@
 // Everything you'd normally edit lives here.
-// Each list becomes rows on the page, in the order written.
+// Sections appear in the order written. A section holds either rows or paragraphs:
+//   rows: [{ date, text }]   a small date on the left
+//   rows: [{ name, text }]   a name on the left
+//   paragraphs: ['…', '…']   plain prose
 
 window.SITE = {
   name: 'Khushmeet Shergill',
-  intro: 'Infrastructure engineer in the Bay Area. I look for the step everyone still does by hand, and make it go away.',
+
+  // The background: 'season' follows the time of year (winter, garden in spring,
+  // sunlight in summer, autumn), or name one: life, stars, autumn, sunlight, winter, garden.
+  background: 'season',
+
+  intro: "I'm an infrastructure engineer in the Bay Area. I look for the step everyone still does by hand and make it go away, and I like my own software the old way: write it, compile it, run it.",
 
   // icon matches a symbol in index.html: bluesky, github, mail
   links: [
@@ -12,41 +20,46 @@ window.SITE = {
     { label: 'Email khushmeet@hey.com', url: 'mailto:khushmeet@hey.com', icon: 'mail', tooltip: 'khushmeet@hey.com' },
   ],
 
-  now: [
+  sections: [
     {
-      when: 'Sep 2026',
-      text: "Writing firmware for the X4 Pro, getting Hearth to run my family's apps, pinning down the core ideas for my language, and listening across Western and Indian classical music.",
+      title: 'Now',
+      rows: [
+        {
+          date: 'Oct 2026',
+          text: 'Turning a pocket e-ink reader into a tiny computer, so I reach for my phone less. Teaching Hearth to run my family\'s apps. Settling the core of my language: indentation, no braces. Listening to Western and Indian classical music side by side.',
+        },
+      ],
+    },
+    {
+      title: 'Building',
+      rows: [
+        { name: 'Hearth', text: 'Upload a binary, watch its logs, keep it running. A deployer for one home server, with no containers and only boring protocols.' },
+        { name: 'A new language', text: 'One way to do things, compiled straight to machine code, with a single binary for the whole toolchain. When its goals collide, expressiveness wins.' },
+        { name: 'X4 Pro firmware', text: 'My own firmware for the Xteink X4 Pro, built small and only for what I use.' },
+        { name: 'leechess', text: 'A chess coach that explains how to think about a move, not just what the engine says, and brings back the tactics I keep missing.' },
+        { name: 'Orbit', text: 'A podcast app that sorts episodes by how fast they go stale, so the ones that keep can wait.' },
+        { name: 'LLM notebook', text: 'Prompts as notebook cells you can fold away, so a long conversation stops being one endless scroll.' },
+      ],
+    },
+    {
+      title: 'Rabbit holes',
+      rows: [
+        { name: 'Plan 9', text: 'What everyday computing might look like if Bell Labs\' sequel to Unix had won.' },
+        { name: 'Variable fonts', text: 'Axes, ligatures, and the texture healing that makes some monospace fonts read so evenly.' },
+        { name: 'Cellular automata', text: 'Lenia, neural cellular automata, and other simple rules that look alive. Hence the dots.' },
+        { name: 'The Chronofile', text: 'Buckminster Fuller recorded his life every fifteen minutes for decades. I want a digital one.' },
+        { name: 'Classical music', text: 'Western and Indian traditions, heard against each other.' },
+        { name: 'Sky surveys', text: 'Maps of millions of galaxies, and the software astronomers use to read them.' },
+      ],
+    },
+    {
+      title: 'By day',
+      paragraphs: [
+        'I work on Apple\'s identity infrastructure as a contract engineer. I look after about 17 services handling around 5 million requests a minute, and most of my work is taking people out of the loop: pipelines that deploy and test every merge, a provisioner that builds whole QE environments in place of days of setup, and a console that two dozen SREs use to run bare-metal servers.',
+        'Before that I spent three years at HSBC tuning authentication and moving services to AWS. I studied computer science at VIT and data science at the University at Buffalo.',
+      ],
     },
   ],
 
-  building: [
-    { title: 'Hearth', text: "Deploys my family's apps to one home server. Go, no Docker." },
-    { title: 'A new language', text: 'Designed from its goals outward, with a rule for which goal wins when they conflict.' },
-    { title: 'X4 Pro firmware', text: 'Custom firmware for the Xteink X4 Pro e-ink reader.' },
-    { title: 'leechess', text: 'A chess trainer built around a coaching loop.' },
-    { title: 'Orbit', text: 'A podcast app that sorts episodes by how quickly they go stale.' },
-    { title: 'LLM notebook', text: 'A Jupyter-style notebook where every cell is a prompt.' },
-  ],
-
-  work: [
-    {
-      when: '2023–now',
-      title: 'Apple',
-      role: 'Infrastructure engineer, Auth Services',
-      text: 'I run about 17 services serving around 5 million requests a minute. I moved them onto Spinnaker pipelines that deploy, test and record results on every merge; built a provisioner that stands up full QE environments, replacing days to weeks of manual setup; wrote the Terraform and Python layer for a new internal cloud; and built an Electron console that two dozen SREs use to manage bare-metal servers.',
-    },
-    {
-      when: '2018–2021',
-      title: 'HSBC',
-      role: 'Software engineer',
-      text: 'Tuned the authentication system, moved services from on-prem to AWS, and delivered regulatory projects.',
-    },
-  ],
-
-  education: [
-    { when: '2021–2023', title: 'University at Buffalo', role: 'MS, Data Science' },
-    { when: '2014–2018', title: 'VIT Vellore', role: 'B.Tech, Computer Science' },
-  ],
-
-  colophon: "Set in Instrument Serif and Instrument Sans. The background runs Conway's Game of Life at a steady density. It gathers around the text and thins out beneath it, and its colors change with the seasons.",
+  colophon: "Set in Instrument Serif and Instrument Sans. The background follows the seasons: snow in winter, a wildflower meadow in spring, leaf shadows in summer and falling leaves in autumn. All of it is drawn in code.",
 };

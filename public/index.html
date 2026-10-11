@@ -14,10 +14,11 @@
   <script src="season.js"></script>
   <script src="content.js" defer></script>
   <script src="render.js" defer></script>
-  <script src="life.js" defer></script>
+  <script src="backgrounds.js" defer></script>
 </head>
 <body>
-  <canvas id="life" aria-hidden="true"></canvas>
+  <canvas id="backdrop-soft" aria-hidden="true"></canvas>
+  <canvas id="backdrop" aria-hidden="true"></canvas>
 
   <main class="panel">
     <header class="head">
@@ -26,25 +27,7 @@
       <nav class="social" aria-label="Elsewhere" data-slot="links"></nav>
     </header>
 
-    <section class="sec" aria-labelledby="now-title">
-      <h2 id="now-title">Now</h2>
-      <div data-slot="now"></div>
-    </section>
-
-    <section class="sec" aria-labelledby="building-title">
-      <h2 id="building-title">Building</h2>
-      <div data-slot="building"></div>
-    </section>
-
-    <section class="sec" aria-labelledby="work-title">
-      <h2 id="work-title">Work</h2>
-      <div data-slot="work"></div>
-    </section>
-
-    <section class="sec" aria-labelledby="education-title">
-      <h2 id="education-title">Education</h2>
-      <div data-slot="education"></div>
-    </section>
+    <div data-slot="sections"></div>
 
     <p class="colophon" data-slot="colophon"></p>
 
@@ -57,20 +40,32 @@
     <svg aria-hidden="true"><use href="#icon-pause"></use></svg>
   </button>
 
-  <!-- Row layouts that render.js fills from content.js -->
-  <template id="entry">
-    <div class="row">
-      <p class="when"></p>
-      <div>
-        <h3><span class="title"></span><span class="role"></span></h3>
-        <p class="text"></p>
-      </div>
+  <!-- Background picker: hidden unless the address ends in ?tweaks -->
+  <div class="tweaks">
+    <div class="tweaks-panel" id="tweaks-panel" hidden>
+      <fieldset>
+        <legend>Background</legend>
+        <div class="seg">
+          <input type="radio" name="bg" id="bg-life" value="life"><label for="bg-life">Life</label>
+          <input type="radio" name="bg" id="bg-stars" value="stars"><label for="bg-stars">Stars</label>
+          <input type="radio" name="bg" id="bg-autumn" value="autumn"><label for="bg-autumn">Autumn</label>
+          <input type="radio" name="bg" id="bg-sunlight" value="sunlight"><label for="bg-sunlight">Sunlight</label>
+          <input type="radio" name="bg" id="bg-winter" value="winter"><label for="bg-winter">Winter</label>
+          <input type="radio" name="bg" id="bg-garden" value="garden"><label for="bg-garden">Garden</label>
+        </div>
+      </fieldset>
     </div>
+    <button type="button" class="tweaks-toggle" id="tweaks-toggle" aria-expanded="false" aria-controls="tweaks-panel">Backgrounds</button>
+  </div>
+
+  <!-- Layouts that render.js fills from content.js -->
+  <template id="section">
+    <section class="sec"><h2></h2></section>
   </template>
 
-  <template id="project">
-    <div class="row project">
-      <h3 class="title"></h3>
+  <template id="row">
+    <div class="row">
+      <p class="label"></p>
       <p class="text"></p>
     </div>
   </template>

@@ -6,32 +6,7 @@
 
   const slot = (name) => document.querySelector(`[data-slot="${name}"]`);
   const clone = (id) => document.getElementById(id).content.firstElementChild.cloneNode(true);
-
-  // Put text in an element, or drop the element when there's nothing to show.
-  const fill = (el, value) => (value ? (el.textContent = value) : el.remove());
-
-  // A dated row: when | title, role, text. Any part can be left out.
-  function entry(item) {
-    const row = clone('entry');
-    fill(row.querySelector('.when'), item.when);
-    const heading = row.querySelector('h3');
-    if (item.title) {
-      fill(heading.querySelector('.title'), item.title);
-      fill(heading.querySelector('.role'), item.role);
-    } else {
-      heading.remove();
-    }
-    fill(row.querySelector('.text'), item.text);
-    return row;
-  }
-
-  // A project row: name | text.
-  function project(item) {
-    const row = clone('project');
-    fill(row.querySelector('.title'), item.title);
-    fill(row.querySelector('.text'), item.text);
-    return row;
-  }
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   // An icon link.
   function link(item) {
@@ -44,12 +19,37 @@
     return a;
   }
 
+  // A row: a date or a name on the left, text on the right.
+  function row(item) {
+    const el = clone('row');
+    const label = el.querySelector('.label');
+    label.textContent = item.date || item.name || '';
+    label.classList.add(item.date ? 'date' : 'name');
+    el.querySelector('.text').textContent = item.text || '';
+    return el;
+  }
+
+  function paragraph(text) {
+    const p = document.createElement('p');
+    p.className = 'prose';
+    p.textContent = text;
+    return p;
+  }
+
+  function section(data) {
+    const sec = clone('section');
+    const heading = sec.querySelector('h2');
+    heading.id = `sec-${slug(data.title)}`;
+    heading.textContent = data.title;
+    sec.setAttribute('aria-labelledby', heading.id);
+    if (data.rows) sec.append(...data.rows.map(row));
+    if (data.paragraphs) sec.append(...data.paragraphs.map(paragraph));
+    return sec;
+  }
+
   slot('name').textContent = site.name;
   slot('intro').textContent = site.intro;
   slot('links').append(...site.links.map(link));
-  slot('now').append(...site.now.map(entry));
-  slot('building').append(...site.building.map(project));
-  slot('work').append(...site.work.map(entry));
-  slot('education').append(...site.education.map(entry));
+  slot('sections').append(...site.sections.map(section));
   slot('colophon').textContent = site.colophon;
 })();
