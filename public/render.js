@@ -6,7 +6,14 @@
 
   const slot = (name) => document.querySelector(`[data-slot="${name}"]`);
   const clone = (id) => document.getElementById(id).content.firstElementChild.cloneNode(true);
-  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  // A text link.
+  function page(item) {
+    const a = document.createElement('a');
+    a.href = item.url;
+    a.textContent = item.label;
+    return a;
+  }
 
   // An icon link.
   function link(item) {
@@ -19,37 +26,10 @@
     return a;
   }
 
-  // A row: a date or a name on the left, text on the right.
-  function row(item) {
-    const el = clone('row');
-    const label = el.querySelector('.label');
-    label.textContent = item.date || item.name || '';
-    label.classList.add(item.date ? 'date' : 'name');
-    el.querySelector('.text').textContent = item.text || '';
-    return el;
-  }
-
-  function paragraph(text) {
-    const p = document.createElement('p');
-    p.className = 'prose';
-    p.textContent = text;
-    return p;
-  }
-
-  function section(data) {
-    const sec = clone('section');
-    const heading = sec.querySelector('h2');
-    heading.id = `sec-${slug(data.title)}`;
-    heading.textContent = data.title;
-    sec.setAttribute('aria-labelledby', heading.id);
-    if (data.rows) sec.append(...data.rows.map(row));
-    if (data.paragraphs) sec.append(...data.paragraphs.map(paragraph));
-    return sec;
-  }
-
   slot('name').textContent = site.name;
-  slot('intro').textContent = site.intro;
+  slot('intro').textContent = [].concat(site.intro).join('\n');
+  slot('pages').append(...(site.pages || []).map(page));
   slot('links').append(...site.links.map(link));
-  slot('sections').append(...site.sections.map(section));
-  slot('colophon').textContent = site.colophon;
+  // No text links: hide their (empty) nav and the divider, leaving just the icons.
+  if (!(site.pages || []).length) slot('pages').hidden = slot('pages').nextElementSibling.hidden = true;
 })();

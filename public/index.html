@@ -6,8 +6,8 @@
   <title>Khushmeet Shergill</title>
   <meta name="description" content="Khushmeet Shergill, infrastructure engineer in the Bay Area.">
 
-  <link rel="preload" href="fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/khush-grotesk.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 
   <!-- Runs before first paint so the right season's colors show immediately. -->
@@ -24,12 +24,12 @@
     <header class="head">
       <h1 data-slot="name"></h1>
       <p class="intro" data-slot="intro"></p>
-      <nav class="social" aria-label="Elsewhere" data-slot="links"></nav>
+      <div class="nav">
+        <nav class="pages" aria-label="Pages" data-slot="pages"></nav>
+        <span class="divider" aria-hidden="true"></span>
+        <nav class="social" aria-label="Elsewhere" data-slot="links"></nav>
+      </div>
     </header>
-
-    <div data-slot="sections"></div>
-
-    <p class="colophon" data-slot="colophon"></p>
 
     <noscript>
       <p>This page fills itself in with JavaScript. You can reach me at khushmeet@hey.com.</p>
@@ -59,17 +59,6 @@
   </div>
 
   <!-- Layouts that render.js fills from content.js -->
-  <template id="section">
-    <section class="sec"><h2></h2></section>
-  </template>
-
-  <template id="row">
-    <div class="row">
-      <p class="label"></p>
-      <p class="text"></p>
-    </div>
-  </template>
-
   <template id="link">
     <a><svg class="icon" aria-hidden="true"><use></use></svg></a>
   </template>

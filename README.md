@@ -8,13 +8,13 @@ The site lives in `public/`. `wrangler.jsonc` tells Cloudflare to serve that fol
 
 | File | What it holds |
 | --- | --- |
-| `public/index.html` | Page structure, row templates, the icon sprite and the (hidden) background picker |
+| `public/index.html` | Page structure, the link template, the icon sprite and the (hidden) background picker |
 | `public/content.js` | All the words and links, and which background to use. This is the file to edit |
 | `public/style.css` | Layout, type, the season palettes and each background's page colours |
 | `public/season.js` | Works out the season before the page paints |
 | `public/render.js` | Fills the page from `content.js` |
 | `public/backgrounds.js` | The six animated backgrounds |
-| `public/fonts/` | Instrument Serif and Instrument Sans, with their licenses |
+| `public/fonts/` | Instrument Serif and Khush Grotesk (trimmed from Monaspace), with their licenses |
 
 ## Backgrounds
 
@@ -27,7 +27,7 @@ There are six, all drawn in code: `life` (Conway's Game of Life), `stars`, `autu
 
 ## Common edits
 
-- **Change text or add a section:** edit `content.js`. Sections appear in the order written; each holds either `rows` (a date or a name on the left, text on the right) or `paragraphs`.
+- **Change the text:** edit `name` and `intro` in `content.js`. `intro` can be one string, or a list to force each entry onto its own line. The capitalised text links under it are `pages`.
 - **Add a social link:** add a `<symbol id="icon-name">` to the sprite at the bottom of `index.html`, then add `{ label, url, icon: 'name' }` to `links` in `content.js`.
 - **Change colours:** the season palettes are at the top of `style.css`; each background's page colours are near the bottom (`html[data-bg="…"]`).
 - **Tune a background:** each scene in `backgrounds.js` starts with a comment and its own constants (how many leaves, how fast the snow falls, and so on).
@@ -48,4 +48,4 @@ Either way you get a `*.workers.dev` URL right away. To use your own domain, ope
 
 ## Fonts
 
-The two `.woff2` files are cut down to Latin characters, which covers English plus accented letters, dashes and curly quotes, so together they're about 60 KB. Instrument Sans keeps its weight axis, so any weight from 400 to 700 works.
+The name is set in Instrument Serif. Everything else is Khush Grotesk, which is GitHub's [Monaspace](https://github.com/githubnext/monaspace) Neon (v1.400) at weight 400, cut down to Latin characters (English plus accented letters, dashes and curly quotes). It keeps Monaspace's texture healing (the `calt` feature). It's renamed because "Monaspace" is a Reserved Font Name under the OFL, and that applies to trimmed copies. Together the two files are about 40 KB.

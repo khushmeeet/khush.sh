@@ -2,6 +2,7 @@
    Fonts, served from /fonts (Latin characters only, OFL licensed)
    ========================================================== */
 
+/* The name: Instrument Serif, a condensed display serif. */
 @font-face {
   font-family: "Instrument Serif";
   src: url("fonts/instrument-serif.woff2") format("woff2");
@@ -10,10 +11,12 @@
   font-display: swap;
 }
 
+/* Everything else: trimmed from GitHub's Monaspace Neon, renamed as its license asks
+   for modified copies. Its texture healing (the calt feature) evens out the spacing. */
 @font-face {
-  font-family: "Instrument Sans";
-  src: url("fonts/instrument-sans.woff2") format("woff2");
-  font-weight: 400 700;
+  font-family: "Khush Grotesk";
+  src: url("fonts/khush-grotesk.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
@@ -103,7 +106,7 @@ html[data-season="summer"] {
   --line: color-mix(in srgb, var(--ink) 14%, transparent);
   --line-strong: color-mix(in srgb, var(--ink) 34%, transparent);
   --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
-  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --grotesk: "Khush Grotesk", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 *,
@@ -117,17 +120,22 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* A full-height column, so the content can sit at the bottom of the screen. */
 body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
   margin: 0;
   padding:
     env(safe-area-inset-top, 0px)
-    clamp(1.25rem, 4vw, 3rem)
-    calc(6rem + env(safe-area-inset-bottom, 0px));
+    clamp(1rem, 4vw, 3rem)
+    calc(clamp(1.5rem, 6vh, 3.5rem) + env(safe-area-inset-bottom, 0px));
   background: var(--ground);
   color: var(--ink);
-  font-family: var(--sans);
-  font-size: 1rem;
-  line-height: 1.55;
+  font-family: var(--grotesk);
+  font-size: 0.9375rem; /* monospace runs wide, so a touch smaller than usual */
+  line-height: 1.7;
 }
 
 p {
@@ -181,14 +189,16 @@ a:hover {
 }
 
 /* ==========================================================
-   Content column
+   Content: the name and a few lines, at the bottom center
    ========================================================== */
 
 .panel {
   position: relative;
-  max-width: 42rem;
-  margin: clamp(2.5rem, 9vh, 6rem) auto 0;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
+  width: 100%;
+  max-width: 56rem;
+  margin: auto auto 0; /* the auto top margin pushes it to the bottom */
+  padding: clamp(1rem, 3vw, 1.5rem);
+  text-align: center;
   /* No box behind the text: a soft halo in the page color keeps letters crisp over the dots. */
   text-shadow: 0 0 2px var(--halo), 0 0 6px var(--halo), 0 0 12px var(--halo);
 }
@@ -199,21 +209,69 @@ a:hover {
   margin: 0;
   font-family: var(--serif);
   font-weight: 400;
-  font-size: clamp(2.2rem, 6vw, 3rem);
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+  font-size: clamp(2.25rem, 7vw, 3rem);
+  line-height: 1.1;
+  color: var(--ink);
   white-space: nowrap;
 }
 
 .intro {
-  margin-top: 0.75rem;
-  font-size: 1.05rem;
+  max-width: 80ch;
+  margin: 1.25rem auto 0;
+  font-size: clamp(0.875rem, 2.2vw, 1.0625rem);
+  line-height: 1.75;
+  color: var(--ink-2);
+  white-space: pre-line; /* a list in content.js puts each entry on its own line */
+  text-wrap: balance;
+}
+
+/* Text links, a divider, then the icons, in one centered row (wrapping on phones). */
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem 1.75rem;
+  margin-top: 1.75rem;
+}
+
+.pages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 2.25rem;
+}
+
+.pages a {
+  display: inline-block;
+  padding: 0.6rem 0;
+  font-size: 0.875rem;
+  letter-spacing: 0.22em;
+  margin-right: -0.22em; /* the last letter's tracking would push the word off-center */
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink-2);
+  transition: color 0.2s;
+}
+
+.pages a:hover {
+  color: var(--ink);
+}
+
+.divider {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--line-strong);
+}
+
+.pages[hidden],
+.divider[hidden] {
+  display: none;
 }
 
 .social {
   display: flex;
-  gap: 0.15rem;
-  margin: 0.6rem 0 0 -12px; /* lines the first icon up with the text */
+  gap: 0.25rem;
 }
 
 .social a {
@@ -226,63 +284,13 @@ a:hover {
 }
 
 .social a:hover {
-  color: var(--link);
+  color: var(--ink);
 }
 
 .icon {
-  width: 1.3rem;
-  height: 1.3rem;
+  width: 1.4rem;
+  height: 1.4rem;
   fill: currentColor;
-}
-
-/* Sections */
-
-.sec {
-  margin-top: 1.75rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--line);
-}
-
-.sec h2 {
-  margin: 0 0 0.6rem;
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 1.5rem;
-  line-height: 1.1;
-}
-
-/* Rows: a label column on the left, details on the right */
-
-.row {
-  display: grid;
-  grid-template-columns: 8rem minmax(0, 1fr);
-  column-gap: 1.25rem;
-  padding: 0.45rem 0;
-}
-
-.label.date {
-  padding-top: 0.15rem;
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
-}
-
-.label.name {
-  font-family: var(--serif);
-  font-size: 1.15rem;
-  line-height: 1.3;
-}
-
-.prose + .prose {
-  margin-top: 0.75rem;
-}
-
-.colophon {
-  margin-top: 1.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  font-size: 0.85rem;
-  color: var(--ink-2);
 }
 
 /* ==========================================================
@@ -328,29 +336,14 @@ a:hover {
 }
 
 /* ==========================================================
-   Small screens: stack the label above the details
-   ========================================================== */
-
-@media (max-width: 34rem) {
-  .row {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 0.5rem 0;
-  }
-
-  .label.date {
-    padding-top: 0;
-  }
-}
-
-/* ==========================================================
    Background experiments: each one sets its own page colors
    ========================================================== */
 
 html[data-bg="stars"] {
   color-scheme: dark;
-  --ground: #08090b;
-  --ink: #ecebe6;
-  --ink-2: #9e9d98;
+  --ground: #000000;
+  --ink: #f2f1ee;
+  --ink-2: #a3a2a8;
   --link: #ffffff;
   --cell: #ffffff;
 }
