@@ -17,7 +17,7 @@ The site lives in `public/`. `wrangler.jsonc` tells Cloudflare to serve that fol
 | `public/stars.js` | The `stars` background. Loaded, with `sky.js`, only when that background is picked |
 | `public/sky.js` | The real sky for the `stars` background: every naked-eye star, the Milky Way, and 125 galaxies, nebulae and clusters. Built by `tools/pack_sky.py`; don't edit by hand |
 | `tools/pack_sky.py` | Downloads the star catalogs and builds `public/sky.js` from them (see "The sky's data" below) |
-| `public/fonts/` | Instrument Serif and Khush Grotesk (trimmed from Monaspace), with their licenses |
+| `public/fonts/` | Doto in two weights, with its license |
 
 ## Backgrounds
 
@@ -74,4 +74,4 @@ Either way you get a `*.workers.dev` URL right away. To use your own domain, ope
 
 ## Fonts
 
-The name is set in Instrument Serif. Everything else is Khush Grotesk, which is GitHub's [Monaspace](https://github.com/githubnext/monaspace) Neon (v1.400) at weight 400, cut down to Latin characters (English plus accented letters, dashes and curly quotes). It keeps Monaspace's texture healing (the `calt` feature). It's renamed because "Monaspace" is a Reserved Font Name under the OFL, and that applies to trimmed copies. Together the two files are about 40 KB.
+Everything is set in [Doto](https://fonts.google.com/specimen/Doto), a dot-matrix monospace under the OFL: weight 800 for the name, 500 for everything else. The files are its Latin subsets from [Fontsource](https://fontsource.org/fonts/doto), about 8 KB together.

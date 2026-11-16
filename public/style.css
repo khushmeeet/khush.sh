@@ -2,21 +2,20 @@
    Fonts, served from /fonts (Latin characters only, OFL licensed)
    ========================================================== */
 
-/* The name: Instrument Serif, a condensed display serif. */
+/* Doto, a dot-matrix monospace from Google Fonts (Latin subset, via Fontsource).
+   Heavy for the name, medium for everything else. */
 @font-face {
-  font-family: "Instrument Serif";
-  src: url("fonts/instrument-serif.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "Doto";
+  src: url("fonts/doto-500.woff2") format("woff2");
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
-/* Everything else: trimmed from GitHub's Monaspace Neon, renamed as its license asks
-   for modified copies. Its texture healing (the calt feature) evens out the spacing. */
 @font-face {
-  font-family: "Khush Grotesk";
-  src: url("fonts/khush-grotesk.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "Doto";
+  src: url("fonts/doto-800.woff2") format("woff2");
+  font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
@@ -105,8 +104,7 @@ html[data-season="summer"] {
   --halo: var(--ground);
   --line: color-mix(in srgb, var(--ink) 14%, transparent);
   --line-strong: color-mix(in srgb, var(--ink) 34%, transparent);
-  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
-  --grotesk: "Khush Grotesk", ui-monospace, "SF Mono", Menlo, monospace;
+  --font: "Doto", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 *,
@@ -133,8 +131,9 @@ body {
     calc(clamp(1.5rem, 6vh, 3.5rem) + env(safe-area-inset-bottom, 0px));
   background: var(--ground);
   color: var(--ink);
-  font-family: var(--grotesk);
-  font-size: 0.9375rem; /* monospace runs wide, so a touch smaller than usual */
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 0.8rem; /* monospace runs wide, so a touch smaller than usual */
   line-height: 1.7;
 }
 
@@ -207,9 +206,8 @@ a:hover {
 
 .head h1 {
   margin: 0;
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(2.25rem, 7vw, 3rem);
+  font-weight: 800;
+  font-size: clamp(1.75rem, 5.5vw, 2.25rem);
   line-height: 1.1;
   color: var(--ink);
   white-space: nowrap;
@@ -218,7 +216,7 @@ a:hover {
 .intro {
   max-width: 80ch;
   margin: 1.25rem auto 0;
-  font-size: clamp(0.875rem, 2.2vw, 1.0625rem);
+  font-size: clamp(0.75rem, 1.9vw, 0.9rem);
   line-height: 1.75;
   color: var(--ink-2);
   white-space: pre-line; /* a list in content.js puts each entry on its own line */
@@ -245,7 +243,7 @@ a:hover {
 .pages a {
   display: inline-block;
   padding: 0.6rem 0;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.22em;
   margin-right: -0.22em; /* the last letter's tracking would push the word off-center */
   text-transform: uppercase;
@@ -485,7 +483,6 @@ html.paused #sun-layers > div { animation-play-state: paused; }
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   color: var(--ink);
-  font-family: var(--grotesk);
   font-size: 0.75rem;
   line-height: 1.45;
   white-space: nowrap;
