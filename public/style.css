@@ -470,3 +470,28 @@ html.paused #sun-layers > div { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   #sun-layers > div { animation: none; }
 }
+
+/* The name of a star or object under the pointer (stars background) */
+.sky-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--ink);
+  font-family: var(--grotesk);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.sky-label.show { opacity: 1; }
+.sky-label span { display: block; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .sky-label { transition: none; } }

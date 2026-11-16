@@ -206,9 +206,15 @@
     return c;
   }
   const between = ([a, b]) => a + rand() * (b - a);
+  // '#rrggbb' to [r, g, b].
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  // A colour, as '#rrggbb' or [r, g, b], at alpha a.
+  const rgba = (color, a) => {
+    const [r, g, b] = typeof color === 'string' ? rgb(color) : color;
+    return `rgba(${r},${g},${b},${a})`;
+  };
   const mix = (a, b, t) => {
-    const p = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    const x = p(a), y = p(b);
+    const x = rgb(a), y = rgb(b);
     return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(',')})`;
   };
 
@@ -322,10 +328,6 @@
         out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]);
       }
       return out;
-    };
-    const rgba = (hex, a) => {
-      const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-      return `rgba(${v[0]},${v[1]},${v[2]},${a})`;
     };
     const stroke = (g, pts, width, style) => {
       g.strokeStyle = style;
@@ -1037,245 +1039,6 @@
 
     return { SPECIES, AUTUMN, autumnLeaf, samara, acorn, twig, flower, bud, foliage, grassHead, butterflyWing };
   })();
-
-  /* ==========================================================
-     Stars: a night sky as a camera sees it, now and then a meteor or a satellite
-     ========================================================== */
-  function Stars() {
-    // Star colour follows temperature, roughly by spectral class (O/B, A, F, G, K, M), and how often
-    // each shows up to the eye: plenty of white and yellow-white, some blue, a few orange and red.
-    const TINTS = [
-      ['#a8bcff', 0.1], ['#cdd9ff', 0.18], ['#f6f6ff', 0.27],
-      ['#fff1dc', 0.22], ['#ffd2a1', 0.15], ['#ffb27a', 0.08],
-    ];
-    const FAINT = TINTS.map(([color]) => color);
-    // Each star's light: a tight bright core with a soft falloff, like a point blurred by a lens.
-    const glows = TINTS.map(([color]) => makeSprite(64, (g, size) => {
-      const [r, gr, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
-      const rg = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      rg.addColorStop(0, `rgba(${r},${gr},${b},1)`);
-      rg.addColorStop(0.08, `rgba(${r},${gr},${b},0.95)`);
-      rg.addColorStop(0.2, `rgba(${r},${gr},${b},0.42)`);
-      rg.addColorStop(0.45, `rgba(${r},${gr},${b},0.1)`);
-      rg.addColorStop(1, `rgba(${r},${gr},${b},0)`);
-      g.fillStyle = rg;
-      g.fillRect(0, 0, size, size);
-    }));
-    // Distant galaxies, painted once as grains of light: spirals with two or three arms,
-    // and a few smooth ellipticals. Drawn tilted and flattened, so each one looks different.
-    // Old stars in the bulge burn yellow, young ones along the arms burn blue, with the odd pink
-    // knot of glowing hydrogen where new stars are forming. Ellipticals are all old, so all warm.
-    const GALAXY_TINTS = [[255, 228, 190], [255, 236, 205], [250, 222, 185], [255, 232, 200]];
-    const ARM = [[170, 195, 255], [190, 210, 255], [205, 215, 255]];
-    const KNOT = [255, 140, 185];
-    function galaxySprite(spiral, [r, gr, b]) {
-      return makeSprite(128, (g, size) => {
-        const c = size / 2, R = size * 0.46;
-        const haze = g.createRadialGradient(c, c, 0, c, c, R);
-        haze.addColorStop(0, `rgba(${r},${gr},${b},0.35)`);
-        haze.addColorStop(0.35, `rgba(${r},${gr},${b},0.08)`);
-        haze.addColorStop(1, `rgba(${r},${gr},${b},0)`);
-        g.fillStyle = haze;
-        g.fillRect(0, 0, size, size);
-        const arms = 2 + (rand() < 0.3 ? 1 : 0), wind = 0.28 + rand() * 0.18, twist = rand() * TAU;
-        for (let i = 0; i < 2600; i++) {
-          let x, y, a, col = [r, gr, b];
-          if (spiral && rand() < 0.78) {
-            // Along a logarithmic arm, scattered more the further out it gets.
-            const t = Math.pow(rand(), 0.8);
-            const rad = R * 0.08 * Math.exp(t * 2.5);
-            const theta = Math.log(rad / (R * 0.08)) / wind + (Math.floor(rand() * arms) / arms) * TAU + twist;
-            const spread = 1.2 + rad * 0.16;
-            x = c + Math.cos(theta) * rad + gauss() * spread;
-            y = c + Math.sin(theta) * rad + gauss() * spread;
-            a = 0.12 + 0.5 * (1 - rad / R);
-            // Bluer the further out along the arm; a rare pink HII knot.
-            col = rand() < 0.035 ? KNOT : rand() < 0.25 + 0.6 * (rad / R) ? pick(ARM) : col;
-          } else {
-            // The bulge: a dense, soft cloud around the core.
-            const s = spiral ? R * 0.16 : R * 0.34;
-            x = c + gauss() * s; y = c + gauss() * s;
-            a = 0.1 + 0.45 * Math.exp(-Math.hypot(x - c, y - c) / s);
-          }
-          if (Math.hypot(x - c, y - c) > R) continue;
-          g.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${Math.min(1, a * (0.5 + rand()))})`;
-          g.fillRect(x, y, rand() < 0.15 ? 1.4 : 0.9, rand() < 0.15 ? 1.4 : 0.9);
-        }
-        const core = g.createRadialGradient(c, c, 0, c, c, size * 0.07);
-        core.addColorStop(0, 'rgba(255,248,230,0.95)');
-        core.addColorStop(1, `rgba(${r},${gr},${b},0)`);
-        g.fillStyle = core;
-        g.fillRect(0, 0, size, size);
-      });
-    }
-    const galaxySprites = Array.from({ length: 10 }, (_, i) => galaxySprite(i < 8, GALAXY_TINTS[i % GALAXY_TINTS.length]));
-    // Diffraction spikes: the four-pointed cross a telescope puts on a bright star.
-    const spikes = TINTS.map(([color]) => makeSprite(96, (g, size) => {
-      const [r, gr, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
-      const c = size / 2;
-      for (const [dx, dy] of [[1, 0], [0, 1]]) {
-        const lg = g.createLinearGradient(c - dx * c, c - dy * c, c + dx * c, c + dy * c);
-        lg.addColorStop(0, `rgba(${r},${gr},${b},0)`);
-        lg.addColorStop(0.5, `rgba(${r},${gr},${b},0.85)`);
-        lg.addColorStop(1, `rgba(${r},${gr},${b},0)`);
-        g.fillStyle = lg;
-        if (dx) g.fillRect(0, c - 0.6, size, 1.2); else g.fillRect(c - 0.6, 0, 1.2, size);
-      }
-    }));
-    let stars = [], galaxies = [], meteor = null, nextMeteor = 6000, satellite = null, nextSatellite = 20000;
-
-    function tint() {
-      let r = rand();
-      for (let i = 0; i < TINTS.length; i++) { if ((r -= TINTS[i][1]) <= 0) return i; }
-      return 1;
-    }
-    function makeStar(x, y) {
-      const m = Math.pow(rand(), 3);                    // brightness: most stars are faint, a few are bright
-      const faint = m < 0.22;
-      return {
-        x, y, m, faint, k: 0.04 + rand() * 0.18,         // depth: how fast it slides as the page scrolls
-        size: faint ? 0.6 + rand() * 0.6 : 3.5 + m * 12,  // a crisp point, or the width of the glow
-        base: faint ? 0.3 + rand() * 0.45 : 0.7 + m * 0.3,
-        tint: tint(),
-        glow: null,
-        spike: null,                                       // set below: only the brighter stars get a cross
-        depth: faint ? rand() * 0.15 : 0.08 + rand() * 0.3,   // how much it twinkles
-        speed: 0.05 + rand() * 0.25,                       // twinkles per second
-        phase: rand() * TAU,
-      };
-    }
-    function star(x, y) {
-      const s = makeStar(x, y);
-      s.glow = glows[s.tint];
-      if (!s.faint && s.m > 0.55) s.spike = spikes[s.tint];
-      return s;
-    }
-
-    return {
-      fps: 24,
-      parallax: true,
-      colors() {},
-      resize() {
-        stars = [];
-        // An even scatter of mostly faint stars.
-        for (let i = 0, n = Math.round((w * h) / 680); i < n; i++) stars.push(star(rand() * w, rand() * h));
-        // A handful of the brightest, with a wider bloom.
-        for (let i = 0, n = 4 + Math.floor(rand() * 4); i < n; i++) {
-          const s = star(rand() * w, rand() * h);
-          s.faint = false; s.size = 16 + rand() * 10; s.base = 1; s.glow = glows[s.tint]; s.spike = spikes[s.tint];
-          stars.push(s);
-        }
-        // Galaxies scattered across the sky, far off, so they slide the slowest. Mostly small,
-        // a few closer and larger. The text's quiet zone dims the ones behind it.
-        galaxies = [];
-        for (let i = 0, n = Math.max(8, Math.min(60, Math.round((w * h) / 26000))); i < n; i++) {
-          const x = rand() * w, y = rand() * h;
-          galaxies.push({
-            x, y, k: 0.02 + rand() * 0.04,
-            size: rand() < 0.15 ? 60 + rand() * 40 : 24 + rand() * 34,
-            flat: 0.3 + rand() * 0.6,                    // how edge-on it is
-            angle: rand() * Math.PI,
-            base: 0.55 + rand() * 0.4,
-            sprite: galaxySprites[Math.floor(rand() * galaxySprites.length)],
-            speed: 0.02 + rand() * 0.04, phase: rand() * TAU, // a slow, slight shimmer
-          });
-        }
-        // A few loose clusters, the way stars bunch up in a real photo. Kept out in the open.
-        for (let c = 0, clusters = 3 + Math.floor(rand() * 3); c < clusters; c++) {
-          let cx = 0, cy = 0;
-          for (let tries = 0; tries < 12; tries++) {
-            cx = rand() * w; cy = rand() * h;
-            if (quiet(cx, cy, 0, 140) > 0.9) break;
-          }
-          const spread = 25 + rand() * 45;
-          const k = 0.04 + rand() * 0.18;
-          for (let i = 0, n = 20 + Math.floor(rand() * 35); i < n; i++) {
-            const s = star(cx + gauss() * spread * 1.3, cy + gauss() * spread * 1.3);
-            s.k = k;
-            stars.push(s);
-          }
-        }
-        // Group by colour so drawing changes fillStyle only a handful of times.
-        stars.sort((a, b) => a.tint - b.tint);
-      },
-      update(now) {
-        if (!meteor && now > nextMeteor) {
-          const fromRight = rand() < 0.5;
-          meteor = {
-            x: fromRight ? w * (0.75 + rand() * 0.3) : w * (0.05 + rand() * 0.25),
-            y: -20 + rand() * h * 0.25,
-            angle: fromRight ? Math.PI * (0.72 + rand() * 0.08) : Math.PI * (0.2 + rand() * 0.08),
-            start: now, life: 700 + rand() * 500, length: 90 + rand() * 90,
-          };
-          nextMeteor = now + 12000 + rand() * 20000;
-        }
-        if (meteor && now - meteor.start > meteor.life) meteor = null;
-        // A satellite: a steady dot crossing the top of the sky, slowly.
-        if (!satellite && now > nextSatellite) {
-          const ltr = rand() < 0.5;
-          satellite = { x0: ltr ? -10 : w + 10, x1: ltr ? w + 10 : -10, y0: h * (0.04 + rand() * 0.18), drop: h * (rand() * 0.12), start: now, life: 28000 + rand() * 14000 };
-          nextSatellite = now + 50000 + rand() * 50000;
-        }
-        if (satellite && now - satellite.start > satellite.life) satellite = null;
-      },
-      draw(now) {
-        ctx.clearRect(0, 0, w, h);
-        for (const gx of galaxies) {
-          const y = onScreen(gx.y, gx.k, gx.size, h);
-          const a = gx.base * (0.88 + 0.12 * Math.sin(now * 0.001 * gx.speed * TAU + gx.phase)) * quiet(gx.x, y, 0.15, 140);
-          if (a < 0.012) continue;
-          ctx.save();
-          ctx.globalAlpha = a;
-          ctx.translate(gx.x, y);
-          ctx.rotate(gx.angle);
-          ctx.scale(1, gx.flat);
-          ctx.drawImage(gx.sprite, -gx.size / 2, -gx.size / 2, gx.size, gx.size);
-          ctx.restore();
-        }
-        let fill = -1;
-        for (const s of stars) {
-          const y = onScreen(s.y, s.k, 12, h);
-          const twinkle = 1 - s.depth * (0.5 + 0.5 * Math.sin(now * 0.001 * s.speed * TAU + s.phase));
-          const a = Math.min(1, s.base * twinkle * quiet(s.x, y, 0.32, 100));
-          if (a < 0.012) continue;
-          ctx.globalAlpha = a;
-          if (s.faint) {
-            if (fill !== s.tint) { fill = s.tint; ctx.fillStyle = FAINT[fill]; }
-            ctx.fillRect(s.x - s.size / 2, y - s.size / 2, s.size, s.size);
-          } else {
-            ctx.drawImage(s.glow, s.x - s.size / 2, y - s.size / 2, s.size, s.size);
-            if (s.spike) { const d = s.size * 1.5; ctx.drawImage(s.spike, s.x - d / 2, y - d / 2, d, d); }
-          }
-        }
-        ctx.globalAlpha = 1;
-
-        if (satellite) {
-          const p = (now - satellite.start) / satellite.life;
-          const x = satellite.x0 + (satellite.x1 - satellite.x0) * p, y = satellite.y0 + satellite.drop * p;
-          ctx.fillStyle = '#ffffff';
-          ctx.globalAlpha = 0.5 * Math.min(1, p * 8, (1 - p) * 8) * quiet(x, y, 0.2, 100);
-          ctx.beginPath(); ctx.arc(x, y, 0.8, 0, TAU); ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-        if (meteor) {
-          const p = (now - meteor.start) / meteor.life;
-          const dist = p * Math.max(w, h) * 0.4;
-          const hx = meteor.x + Math.cos(meteor.angle) * dist, hy = meteor.y + Math.sin(meteor.angle) * dist;
-          const tx = hx - Math.cos(meteor.angle) * meteor.length, ty = hy - Math.sin(meteor.angle) * meteor.length;
-          const a = Math.sin(p * Math.PI) * 0.8 * quiet(hx, hy, 0.15, 120);
-          const grad = ctx.createLinearGradient(hx, hy, tx, ty);
-          // A hot white-green head (burning metals) cooling to an orange trail.
-          grad.addColorStop(0, `rgba(235,255,240,${a})`);
-          grad.addColorStop(0.3, `rgba(255,220,170,${a * 0.6})`);
-          grad.addColorStop(1, 'rgba(255,170,110,0)');
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 1.1;
-          ctx.lineCap = 'round';
-          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
-        }
-      },
-    };
-  }
 
   /* ==========================================================
      Autumn: leaves falling at three depths, a few resting along the bottom
@@ -2057,11 +1820,33 @@
      Switching, sizing and the frame loop
      ========================================================== */
   const SCENES = {
-    life: Life, stars: Stars, autumn: Autumn, garden: Garden,
+    life: Life, autumn: Autumn, garden: Garden,
     sunlight: Sunlight,
     winter: Winter,
   };
-  let scene = null, sceneName = '', dirty = true, lastFrame = 0, softScale = 1;
+  // Scenes kept in their own files, fetched the first time they're picked. Stars needs the star
+  // catalog (sky.js), which no other background uses.
+  const LATER = { stars: ['sky.js', 'stars.js'] };
+  const fetching = {};
+  function fetchScene(name) {
+    fetching[name] = fetching[name] || Promise.all(LATER[name].map((src) => new Promise((done, fail) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = done;
+      script.onerror = () => { delete fetching[name]; fail(new Error(`couldn't load ${src}`)); };
+      document.head.appendChild(script);
+    }))).then(() => { SCENES[name] = window.laterScenes[name]; });
+    return fetching[name];
+  }
+  // What a scene in its own file gets to work with (see stars.js).
+  const kit = {
+    ctx, TAU, quiet, makeSprite, rgba, scrollRoom,
+    get w() { return w; }, get h() { return h; }, get scroll() { return scroll; }, get text() { return text; },
+    redraw() { dirty = true; },
+  };
+  // Shown while a scene is still on its way: nothing.
+  const NOTHING = { fps: 0, resize() {}, colors() {}, update() {}, draw() { ctx.clearRect(0, 0, w, h); } };
+  let scene = NOTHING, sceneName = '', wanted = '', dirty = true, lastFrame = 0, softScale = 1;
 
   function size() {
     const nw = canvas.clientWidth, nh = canvas.clientHeight;
@@ -2083,12 +1868,18 @@
   }
 
   function use(name) {
-    if (!SCENES[name]) name = 'life';
-    if (scene && scene.leave) scene.leave();
+    if (!SCENES[name] && !LATER[name]) name = 'life';
+    wanted = name;
+    if (!SCENES[name]) {
+      // Keep the current scene up until this one arrives, unless another is picked meanwhile.
+      fetchScene(name).then(() => { if (wanted === name) use(name); }, () => { if (wanted === name) use('life'); });
+      return;
+    }
+    if (scene.leave) scene.leave();
     sceneName = name;
     root.dataset.bg = name;
     scroll = window.scrollY || 0;
-    scene = SCENES[name]();
+    scene = SCENES[name](kit);
     sizeSoft(scene.sharpSoft ? dpr : 1);
     ctx.clearRect(0, 0, w, h);
     softCanvas.style.filter = scene.softBlur ? `blur(${scene.softBlur}px)` : 'none';
@@ -2148,7 +1939,7 @@
   const BY_SEASON = { winter: 'winter', spring: 'garden', summer: 'sunlight', autumn: 'autumn' };
   function chosen() {
     const asked = new URLSearchParams(location.search).get('bg');
-    if (SCENES[asked]) return asked;
+    if (SCENES[asked] || LATER[asked]) return asked;
     const configured = (window.SITE && window.SITE.background) || 'season';
     return configured === 'season' ? BY_SEASON[root.dataset.season] || 'life' : configured;
   }
