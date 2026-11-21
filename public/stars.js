@@ -110,23 +110,225 @@
         g.fillRect(0, 0, size, size);
       });
     }
-    // Glowing gas: red and pink where hydrogen glows, a teal heart where oxygen does (Orion),
-    // blue where dust reflects starlight (the Pleiades), orange threads for the Crab's wreckage.
+    // Glowing gas: red and pink where hydrogen glows, teal where oxygen does (Orion's heart, the
+    // shells of old supernovae), blue where dust reflects starlight, orange threads for the Crab.
     const HYDROGEN = [[225, 70, 100], [240, 100, 130], [200, 60, 90]];
-    function nebulaSprite(id, kind) {
-      return makeSprite(128, (g, size) => {
+    const OXYGEN = [110, 215, 210];
+    const DUST = [[150, 180, 255], [120, 160, 255], [180, 200, 255]];
+    const CRAB = [[255, 160, 105], [255, 135, 110], [255, 185, 130]];
+    // Supernova remnants seen as a shell of hydrogen and oxygen: the Jellyfish (IC 443). The Veil has
+    // its own painter, veilSprite.
+    const SHELLS = new Set(['IC0443']);
+    // Value noise for the gas's wisps: a grid of random heights, eased between.
+    function noise(cells) {
+      const n = cells + 1, v = Float32Array.from({ length: n * n }, rand);
+      const ease = (t) => t * t * (3 - 2 * t);
+      return (u, w) => {
+        const x = u * cells, y = w * cells, x0 = Math.min(cells - 1, Math.floor(x)), y0 = Math.min(cells - 1, Math.floor(y));
+        const fx = ease(x - x0), fy = ease(y - y0), i = y0 * n + x0;
+        const top = v[i] + (v[i + 1] - v[i]) * fx, bottom = v[i + n] + (v[i + n + 1] - v[i + n]) * fx;
+        return top + (bottom - top) * fy;
+      };
+    }
+    const BELL = Float32Array.from({ length: 401 }, (_, i) => Math.exp(-i / 64));   // exp(-d²), d² in 1/64ths
+    // Painted pixel by pixel rather than as stacked gradients: a hundred overlapping gradients pile
+    // their dithering into a visible checker, and saturate into a solid oval.
+    // Soft enough to be painted small and drawn larger: 96 pixels, 64 for the small ones.
+    function nebulaSprite(id, kind, deg) {
+      const shell = SHELLS.has(id);
+      const colors = kind === 'reflection' ? DUST
+        : shell ? [...HYDROGEN, OXYGEN, OXYGEN]
+        : kind === 'remnant' ? CRAB
+        : id === 'IC0405' ? [...HYDROGEN, ...DUST]        // the Flaming Star: half glow, half reflection
+        : HYDROGEN;
+      // The showpieces get more pixels, for their lanes and hearts.
+      return makeSprite(id === 'M42' || id === 'M20' ? 128 : deg < 0.6 ? 64 : 96, (g, size) => {
         const c = size / 2;
-        const colors = kind === 'reflection' ? [[150, 180, 255], [120, 160, 255], [180, 200, 255]]
-          : kind === 'remnant' ? [[255, 170, 110], [255, 140, 120], [210, 220, 255]]
-          : HYDROGEN;
+        // Clumps of gas, each a soft blob of one colour. `solid` ones skip the wisps (bright hearts).
+        // In sprite space +x is north and +y is west, since the scene turns +x to north (for pa = 0).
+        const clumps = [];
         const hole = id === 'NGC2238' ? 0.18 : 0;       // the Rosette's stars have blown out its middle
-        for (let i = 0; i < 140; i++) {
-          const x = gauss() * size * 0.22, y = gauss() * size * 0.22;
-          if (hole && Math.hypot(x, y) < size * hole) continue;
-          puff(g, c + x, c + y, size * (0.04 + rand() * 0.16), pick(colors), 0.025 + rand() * 0.06);
+        const brightSide = rand() * TAU;                // a shell is brighter on the side it's ploughing into
+        // Where the glowing gas sits and how far it spreads, north-south and east-west (fractions of the sprite).
+        let [gx, gy, sx, sy] = [0, 0, 0.2, 0.2];
+        // Dark lanes of dust in front of the gas, as [x0, y0, x1, y1, width].
+        let lanes = [];
+        if (id === 'M42') {
+          // The Orion Nebula fans out south of the Trapezium. Its bright heart glows green-blue with
+          // oxygen around the four stars, and the Fish's Mouth, a dark bay of dust, cuts in from the
+          // east just north of them, parting it from M43.
+          [gx, gy, sx, sy] = [-0.07, 0, 0.17, 0.22];
+          lanes = [[0.12, -0.36, 0.06, -0.06, 0.06]];
+          clumps.push({ x: c, y: c, r: size * 0.09, w: 1.2, col: [150, 255, 225], solid: true });
+          clumps.push({ x: c - size * 0.05, y: c + size * 0.04, r: size * 0.07, w: 0.6, col: [255, 200, 215], solid: true });
+          clumps.push({ x: c, y: c, r: size * 0.025, w: 4, col: [255, 255, 240], solid: true });
+        } else if (id === 'M20') {
+          // The Trifid: a round red glow split into three by lanes of dust meeting near its central
+          // star, with a blue cloud of dust lit by the same star off its north side.
+          [gx, gy, sx, sy] = [-0.09, 0, 0.11, 0.11];
+          const lane = (bearing) => { const t = bearing * RAD; return [-0.09, 0, -0.09 + Math.cos(t) * 0.17, -Math.sin(t) * 0.17, 0.04]; };
+          lanes = [lane(50), lane(175), lane(290)];        // degrees from north through east
+          for (let i = 0; i < 12; i++) {
+            clumps.push({ x: c + size * (0.18 + gauss() * 0.06), y: c + size * gauss() * 0.09,
+              r: size * (0.05 + rand() * 0.05), w: 0.4 + rand() * 0.5, col: pick(DUST) });
+          }
+          clumps.push({ x: c + size * -0.09, y: c, r: size * 0.015, w: 2, col: [235, 240, 255], solid: true });
         }
-        if (id === 'M20') puff(g, c + size * 0.16, c - size * 0.12, size * 0.18, [130, 160, 255], 0.18);
-        if (id === 'M42') { puff(g, c, c, size * 0.14, [150, 255, 225], 0.22); puff(g, c, c, size * 0.04, [255, 255, 240], 0.7); }
+        for (let i = 0, n = shell ? 70 : 30; i < n; i++) {
+          let x, y, w = 0.3 + rand() * 0.7;
+          const col = pick(colors);
+          if (shell) {
+            const th = rand() * TAU, r = size * (0.32 + gauss() * 0.03);
+            x = Math.cos(th) * r; y = Math.sin(th) * r;
+            w *= 0.3 + 1.7 * Math.max(0, Math.cos(th - brightSide)) ** 1.5;
+          } else {
+            x = size * (gx + gauss() * sx); y = size * (gy + gauss() * sy);
+            if (hole && Math.hypot(x, y) < size * hole) continue;
+            if (DUST.includes(col) && kind !== 'reflection') x += size * 0.14;   // the reflecting dust off to one side
+          }
+          const r = size * (shell ? 0.025 + rand() * 0.035 : 0.05 + rand() * (sx < 0.15 ? 0.06 : 0.11));
+          clumps.push({ x: c + x, y: c + y, r, w, col });
+        }
+        if (kind === 'remnant' && !shell) clumps.push({ x: c, y: c, r: size * 0.12, w: 0.5, col: [150, 180, 255], solid: true });
+        const coarse = noise(5), mid = noise(11), fine = noise(23);
+        // Each clump adds its light to the pixels near it (out to 2.5 radii, where it's under 0.2%).
+        const n = size * size, wispy = new Float32Array(n), solid = new Float32Array(n);
+        // Colour summed separately for wisps and hearts, so a heart keeps its own colour.
+        const rgbW = new Float32Array(n * 3), rgbS = new Float32Array(n * 3);
+        for (const k of clumps) {
+          const reach = k.r * 2.5;
+          const i0 = Math.max(0, Math.floor(k.x - reach)), i1 = Math.min(size - 1, Math.ceil(k.x + reach));
+          const j0 = Math.max(0, Math.floor(k.y - reach)), j1 = Math.min(size - 1, Math.ceil(k.y + reach));
+          for (let j = j0; j <= j1; j++) {
+            for (let i = i0; i <= i1; i++) {
+              const d2 = ((i + 0.5 - k.x) ** 2 + (j + 0.5 - k.y) ** 2) / (k.r * k.r);
+              if (d2 >= 6.25) continue;
+              const v = k.w * BELL[(d2 * 64) | 0], p = j * size + i;
+              const rgb = k.solid ? rgbS : rgbW;
+              if (k.solid) solid[p] += v; else wispy[p] += v;
+              rgb[p * 3] += v * k.col[0]; rgb[p * 3 + 1] += v * k.col[1]; rgb[p * 3 + 2] += v * k.col[2];
+            }
+          }
+        }
+        const img = g.createImageData(size, size), px = img.data;
+        for (let j = 0; j < size; j++) {
+          for (let i = 0; i < size; i++) {
+            const p = j * size + i, sum = wispy[p] + solid[p];
+            if (sum < 0.002) continue;
+            const edge = Math.min(1, (size * 0.49 - Math.hypot(i + 0.5 - c, j + 0.5 - c)) / (size * 0.1));
+            if (edge <= 0) continue;
+            // Filaments: ridges where the noise crosses its middle, over a patchy base.
+            const u = i / size, w = j / size;
+            const ridge = 1 - Math.abs(2 * mid(u, w) - 1);
+            const veil = 1.4 * coarse(u, w) ** 1.5 * (0.3 + 0.7 * ridge ** 3) + 0.2 * (fine(u, w) - 0.5);
+            // How much a lane of dust in front blocks here. Dust isn't ruled straight: each lane wanders,
+            // starts thin where the lanes meet, widens outward, and thins out again at its far end.
+            // Where lanes meet, the dust is no thicker than the thickest of them.
+            let block = 0;
+            const wx = (mid(w, u) - 0.5) * 0.07, wy = (mid(1 - u, w) - 0.5) * 0.07;
+            for (const [x0, y0, x1, y1, width] of lanes) {
+              const ax = (i + 0.5 - c) / size - x0 + wx, ay = (j + 0.5 - c) / size - y0 + wy, bx = x1 - x0, by = y1 - y0;
+              const t = Math.max(0, Math.min(1, (ax * bx + ay * by) / (bx * bx + by * by)));
+              const wide = width * (0.55 + 0.9 * t);
+              block = Math.max(block, 0.85 * (1 - t ** 3) * Math.exp(-((ax - t * bx) ** 2 + (ay - t * by) ** 2) / (wide * wide)));
+            }
+            const clear = 1 - block;
+            // The wisps' glow, with the hearts laid over it.
+            // The gaps between wisps thin the gas but never empty it: real gas has no clean holes.
+            const aw = (1 - Math.exp(-wispy[p] * Math.max(0.2, shell ? 0.5 + veil : veil) * 1.04)) * 0.9;   // a shell is threads already
+            const as = 1 - Math.exp(-solid[p] * 1.3);
+            const a = (as + aw * (1 - as)) * clear * edge;
+            if (a <= 0) continue;
+            const k = p * 4, fw = wispy[p] ? aw * (1 - as) / (wispy[p] * (as + aw * (1 - as))) : 0;
+            const fs = solid[p] ? as / (solid[p] * (as + aw * (1 - as))) : 0;
+            for (let ch = 0; ch < 3; ch++) px[k + ch] = rgbW[p * 3 + ch] * fw + rgbS[p * 3 + ch] * fs;
+            px[k + 3] = Math.round(a * 255);
+          }
+        }
+        g.putImageData(img, 0, 0);
+      });
+    }
+    // The Veil: the Cygnus Loop, the shell of a star that blew up some 15,000 years ago, seen as threads
+    // where its shock wave runs into thin gas. Teal-blue oxygen glows right at the front of the shock,
+    // red hydrogen just behind it, and the threads lie along the front, braided like combed hair.
+    // Laid out in arcminutes from the loop's centre, from the catalogued places of its parts:
+    // the Eastern Veil (NGC 6992, 6995, IC 1340), the Western Veil (NGC 6960) and Pickering's
+    // Triangle (NGC 6979, 6974) reaching in from the north rim. Its south is a blowout, nearly empty.
+    const VEIL_RIM = [100, 95, 90, 84, 86, 92, 105, 95, 76, 67, 74, 90];   // radius every 30° from north through east
+    const VEIL_GLOW = [[70, 50, 1], [122, 22, 0.8], [262, 26, 0.95], [5, 32, 0.3], [318, 18, 0.22], [185, 30, 0.02]];  // [PA, spread, brightness]
+    const PICKERING = [[95, -16, 38, 4], [93, 8, 46, 6], [88, -4, 55, -8]];        // [north, east] to [north, east]
+    const HYDROGEN_LIGHT = [255, 45, 80], OXYGEN_LIGHT = [70, 200, 255];
+    function veilSprite() {
+      const salt = Math.floor(rand() * 1e6);
+      const hash = (x, y) => {
+        let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + salt) | 0;
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+      };
+      const vnoise = (x, y) => {                       // value noise over the whole plane
+        const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+        const ex = fx * fx * (3 - 2 * fx), ey = fy * fy * (3 - 2 * fy);
+        const top = hash(xi, yi) + (hash(xi + 1, yi) - hash(xi, yi)) * ex;
+        const bottom = hash(xi, yi + 1) + (hash(xi + 1, yi + 1) - hash(xi, yi + 1)) * ex;
+        return top + (bottom - top) * ey;
+      };
+      const ridge = (n, sharp) => (1 - Math.abs(2 * n - 1)) ** sharp;
+      const bump = (a, b, spread) => { const d = Math.atan2(Math.sin(a - b), Math.cos(a - b)) / spread; return Math.exp(-d * d); };
+      // Threads running along a front, `s` along it and `d` across it (arcminutes): they wander together,
+      // so they braid rather than run ruled straight.
+      const threads = (s, d) => {
+        const dd = d + 5 * (vnoise(s / 30, 3.1) - 0.5) + 2.5 * (vnoise(s / 9, 7.7) - 0.5);
+        return 0.5 * ridge(vnoise(s / 40, dd / 2.4), 3) + 0.4 * ridge(vnoise(s / 18 + 50, dd / 1.4), 4) + 0.3 * ridge(vnoise(s / 9 + 90, dd / 0.9), 4);
+      };
+      const NORTH = 240, WEST = 240 * 0.76;            // arcminutes across the sprite (the scene squashes west by 0.76)
+      // 192 pixels: it's drawn about 150 device pixels across, at most.
+      return makeSprite(192, (g, size) => {
+        const c = size / 2, img = g.createImageData(size, size), px = img.data;
+        for (let j = 0; j < size; j++) {
+          for (let i = 0; i < size; i++) {
+            const north = ((i + 0.5 - c) / size) * NORTH, east = -((j + 0.5 - c) / size) * WEST;
+            const r = Math.hypot(north, east), pa = Math.atan2(east, north);
+            const fade = Math.min(1, (size * 0.49 - Math.hypot(i + 0.5 - c, j + 0.5 - c)) / (size * 0.04));
+            if (fade <= 0) continue;
+            // The rim: where the shock front is, here, and how bright it runs.
+            const k = ((pa / RAD + 360) % 360) / 30, k0 = Math.floor(k) % 12, f = k - Math.floor(k), e = (1 - Math.cos(f * Math.PI)) / 2;
+            const s = pa * 90;                                       // along the rim, in about arcminutes
+            const rim = VEIL_RIM[k0] + (VEIL_RIM[(k0 + 1) % 12] - VEIL_RIM[k0]) * e + 6 * (vnoise(s / 40, 1.3) - 0.5);
+            const d = r - rim;
+            if ((d < -25 || d > 18) && !(north > 30 && Math.abs(east) < 30)) continue;   // far from the rim and Pickering's
+            let glow = 0;
+            for (const [at, spread, b] of VEIL_GLOW) glow += b * bump(pa, at * RAD, spread * RAD);
+            glow *= 0.2 + 1.2 * vnoise(s / 22, 9.9);                 // brighter and fainter stretches
+            glow *= Math.min(1, glow);                               // faint stretches fainter still
+            const t = threads(s, d);
+            // Hydrogen behind the front, oxygen in a thin skin right at it, and faint outer arcs ahead of it.
+            // The brighter the stretch, the thicker its band of threads and the more oxygen at its front.
+            const band = 3 + 6 * Math.min(1, glow);
+            let ha = 1.7 * glow * (Math.exp(-(((d + band * 0.8) / band) ** 2)) * (0.1 + 1.4 * t) + (d < 0 ? 0.1 * Math.exp(d / 12) * t : 0));
+            let o3 = 2.4 * glow * Math.min(1, glow) * Math.exp(-(((d + 1.5) / 2.2) ** 2)) * (0.15 + 1.5 * t);
+            if (d > 2 && d < 16) ha += glow * 0.35 * ridge(vnoise(s / 70, d / 3), 10);
+            // Pickering's Triangle: threads reaching in from the north rim.
+            for (const [n0, e0, n1, e1] of PICKERING) {
+              const bx = n1 - n0, by = e1 - e0, len = Math.hypot(bx, by);
+              const along = ((north - n0) * bx + (east - e0) * by) / len;
+              if (along < -4 || along > len + 4) continue;
+              const across = ((north - n0) * by - (east - e0) * bx) / len, tp = threads(along * 1.3 + 400, across);
+              const ends = Math.max(0, Math.min(1, (along + 4) / 14, (len + 4 - along) / 24));   // soft at both ends
+              const w = 0.3 * ends * Math.exp(-((across / 4) ** 2));
+              ha += w * (0.3 + 1.3 * tp); o3 += w * 0.6 * tp;
+            }
+            const red = ha * HYDROGEN_LIGHT[0] + o3 * OXYGEN_LIGHT[0];
+            const green = ha * HYDROGEN_LIGHT[1] + o3 * OXYGEN_LIGHT[1];
+            const blue = ha * HYDROGEN_LIGHT[2] + o3 * OXYGEN_LIGHT[2];
+            const m = Math.max(red, green, blue);
+            if (m < 1) continue;
+            // Where the two overlap their light adds up toward white; the strength becomes the alpha.
+            const q = (j * size + i) * 4;
+            px[q] = (red / m) * 255; px[q + 1] = (green / m) * 255; px[q + 2] = (blue / m) * 255;
+            px[q + 3] = Math.round((1 - Math.exp(-m / 200)) * 255 * fade);
+          }
+        }
+        g.putImageData(img, 0, 0);
       });
     }
     // A planetary nebula: a dying star's shed shell, seen as a ring, teal inside and red at the rim.
@@ -267,15 +469,20 @@
       globular:   { base: 0.55, sprite: shared(4, () => clusterSprite(true)) },
       open:       { base: 0.8,  sprite: shared(6, () => clusterSprite(false)) },
       planetary:  { base: 0.75, sprite: () => ringSprite() },
-      reflection: { base: 0.5,  sprite: (id) => nebulaSprite(id, 'reflection') },
-      remnant:    { base: 0.75, sprite: (id) => nebulaSprite(id, 'remnant') },
-      nebula:     { base: 0.75, sprite: (id) => nebulaSprite(id, 'nebula') },
+      reflection: { base: 0.5,  sprite: (id, deg) => nebulaSprite(id, 'reflection', deg) },
+      // The Eastern Veil is part of the Veil's painting, so it isn't painted again (it can still be hovered).
+      remnant:    { base: 0.75, sprite: (id, deg) => id === 'NGC6960' ? veilSprite() : id === 'NGC6992' ? null : nebulaSprite(id, 'remnant', deg) },
+      nebula:     { base: 0.75, sprite: (id, deg) => nebulaSprite(id, 'nebula', deg) },
     };
+    // OpenNGC gives NGC 6960 the whole Cygnus Loop's size (210' by 160') but the place of its western
+    // filament, so the loop is put at its own centre: G74.0-8.5 in Green's catalogue of supernova remnants.
+    const RECENTRE = { NGC6960: [312.75, 30.667] };
     const objects = (window.SKY_OBJECTS || []).map(([name, ra, dec, kind, deg, flat, pa, ly, id]) => {
       const k = KINDS[kind] || KINDS.nebula;
+      if (RECENTRE[id]) [ra, dec] = RECENTRE[id];
       return at(ra, dec, {
         name, kind, deg, flat, pa: pa * RAD, ly, angle: 0, size: 0,
-        sprite: k.sprite(id), base: k.base,
+        sprite: k.sprite(id, deg), base: k.base,
         speed: 0.02 + rand() * 0.04, phase: rand() * TAU,      // a slow, slight shimmer
       });
     });
@@ -570,7 +777,7 @@
         ctx.restore();
         drawGrain(top);
         for (const o of objects) {
-          if (o.alt <= 0) continue;
+          if (o.alt <= 0 || !o.sprite) continue;
           const x = o.x, y = o.y - top;
           if (x < -o.size || x > kit.w + o.size || y < -o.size || y > kit.h + o.size) continue;
           const a = o.base * (0.88 + 0.12 * Math.sin(now * 0.001 * o.speed * TAU + o.phase))
