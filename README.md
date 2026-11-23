@@ -18,6 +18,8 @@ The site lives in `public/`. `wrangler.jsonc` tells Cloudflare to serve that fol
 | `public/sky.js` | The real sky for the `stars` background: every naked-eye star, the Milky Way, and 125 galaxies, nebulae and clusters. Built by `tools/pack_sky.py`; don't edit by hand |
 | `tools/pack_sky.py` | Downloads the star catalogs and builds `public/sky.js` from them (see "The sky's data" below) |
 | `public/fonts/` | Doto in two weights, with its license |
+| `public/favicon.svg`, `favicon.ico`, `apple-touch-icon.png` | The icon: a dot-matrix "K". The PNG and ICO are rendered from the SVG (square corners, since iOS rounds them itself) |
+| `public/og.png` | The 1200×630 card shown when the link is shared. The `og:` tags in `index.html` point to it at `https://khush.sh/og.png`; regenerate it if the name or intro changes |
 
 ## Backgrounds
 
