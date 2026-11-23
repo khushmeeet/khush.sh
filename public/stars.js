@@ -1,14 +1,98 @@
 // The stars background, kept apart from backgrounds.js because it's the only one that needs the star
-// catalog in sky.js (165 KB). backgrounds.js loads sky.js and this file the first time stars is picked,
-// then calls Stars(kit): `kit` holds what it shares with the other backgrounds (the canvas, the
-// window's size, the scroll position, where the text is, and the drawing helpers).
+// catalog in sky.js (165 KB) and the Moon's and planets' motions in orbits.js. backgrounds.js loads
+// those and this file the first time stars is picked, then calls Stars(kit): `kit` holds what it
+// shares with the other backgrounds (the canvas, the window's size, the scroll position, where the
+// text is, and the drawing helpers).
 
 (() => {
   window.laterScenes = window.laterScenes || {};
   window.laterScenes.stars = Stars;
 
   /* ==========================================================
-     Stars: the real sky over the Bay Area right now, now and then a meteor or a satellite
+     The Moon and the planets: where each one is at a given moment (orbits.js)
+     ========================================================== */
+  const AU_KM = 149597870.7;            // the astronomical unit (IAU 2012), exact by definition
+  const LIGHT_KM_S = 299792.458;        // the speed of light (SI), exact by definition
+  // Returns a function of time (ms since 1970) giving the Sun, the Moon and each planet as x, y, z on
+  // the J2000 equator, seen from the Earth's centre: the frame the star catalog uses, so they sit
+  // among the stars where they really are. The Sun and planets come in au, the Moon in km.
+  // Time is taken as UTC, though both theories run on TDB, about 69 seconds ahead: in that time the
+  // Moon moves about half an arcminute, a twentieth of a pixel here.
+  function Ephemeris() {
+    const RAD = Math.PI / 180;
+    const moon = window.SKY_MOON, rows = window.SKY_PLANETS;
+    if (!moon || !rows || !window.SKY_OBLIQUITY) return null;
+    const eps = window.SKY_OBLIQUITY * RAD, ce = Math.cos(eps), se = Math.sin(eps);
+    const toEquator = (x, y, z) => [x, ce * y - se * z, se * y + ce * z];
+    const poly = (c, T) => c[0] + T * (c[1] + T * (c[2] + T * (c[3] + T * c[4])));
+    const elements = rows.map(([name, curve, ...el]) => ({ name, curve, el }));
+    const STEP = window.SKY_PHASE_STEP || 5;
+    // A planet's magnitude at 1 au from the Sun and from us, at a phase angle (degrees), read off its curve.
+    const reduced = (curve, deg) => {
+      const x = Math.min(curve.length - 1, deg / STEP), i = Math.min(curve.length - 2, Math.floor(x));
+      return i < 0 ? curve[0] : curve[i] + (curve[i + 1] - curve[i]) * (x - i);
+    };
+    const earth = elements.find((p) => p.name === 'Earth');
+    const planets = elements.filter((p) => p !== earth);
+
+    // A planet around the Sun, on the J2000 ecliptic (au), T Julian centuries after J2000: JPL's
+    // recipe for its approximate elements, solving Kepler's equation by Newton's method.
+    function heliocentric(el, T) {
+      const [a, e, I, L, peri, node] = [0, 1, 2, 3, 4, 5].map((i) => el[i] + el[i + 6] * T);
+      const M = ((((L - peri) % 360) + 540) % 360 - 180) * RAD;
+      let E = M + e * Math.sin(M);
+      for (let k = 0; k < 6; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+      const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+      const w = (peri - node) * RAD, O = node * RAD, i = I * RAD;
+      const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), ci = Math.cos(i), si = Math.sin(i);
+      return [
+        (cw * cO - sw * sO * ci) * xp + (-sw * cO - cw * sO * ci) * yp,
+        (cw * sO + sw * cO * ci) * xp + (-sw * sO + cw * cO * ci) * yp,
+        sw * si * xp + cw * si * yp,
+      ];
+    }
+    // The Moon from the Earth's centre (km): ELP 2000-82B's main problem, summed as elp82b.f does.
+    function moonAt(T) {
+      const [W1, D, Ms, Mm, F] = moon.args.map((c) => poly(c, T) * RAD);
+      const sum = (terms, cosine) => {
+        let s = 0;
+        for (let i = 0; i < terms.length; i += 5) {
+          const arg = terms[i] * D + terms[i + 1] * Ms + terms[i + 2] * Mm + terms[i + 3] * F;
+          s += terms[i + 4] * (cosine ? Math.cos(arg) : Math.sin(arg));
+        }
+        return s;
+      };
+      const lon = W1 + (sum(moon.series[0]) / 3600) * RAD, lat = (sum(moon.series[1]) / 3600) * RAD;
+      const r = sum(moon.series[2], true) * moon.scale;
+      const x1 = r * Math.cos(lat) * Math.cos(lon), x2 = r * Math.cos(lat) * Math.sin(lon), x3 = r * Math.sin(lat);
+      // From the ecliptic of date to the ecliptic of J2000 (Laskar's precession, as in elp82b.f).
+      let pw = poly(moon.p, T) * T, qw = poly(moon.q, T) * T;
+      const ra = 2 * Math.sqrt(1 - pw * pw - qw * qw), pwqw = 2 * pw * qw, pw2 = 1 - 2 * pw * pw, qw2 = 1 - 2 * qw * qw;
+      pw *= ra; qw *= ra;
+      return toEquator(pw2 * x1 + pwqw * x2 + pw * x3, pwqw * x1 + qw2 * x2 - qw * x3, -pw * x1 + qw * x2 + (pw2 + qw2 - 1) * x3);
+    }
+    return (ms) => {
+      const T = (ms / 86400000 + 2440587.5 - 2451545) / 36525;
+      const e = heliocentric(earth.el, T), R = Math.hypot(...e);    // the Earth-Moon barycentre stands in for the Earth
+      return {
+        sun: toEquator(-e[0], -e[1], -e[2]),
+        moon: moonAt(T),
+        planets: planets.map((p) => {
+          const h = heliocentric(p.el, T), r = Math.hypot(...h);
+          const at = toEquator(h[0] - e[0], h[1] - e[1], h[2] - e[2]), d = Math.hypot(...at);
+          // Its brightness: dimmer with its distances from the Sun and from us, and with how much of
+          // its lit side faces us (the phase angle, Sun-planet-Earth). How that last one goes is
+          // measured from Horizons, so a thin crescent Venus keeps the glare it really has.
+          const phase = Math.acos(Math.max(-1, Math.min(1, (r * r + d * d - R * R) / (2 * r * d))));
+          return { name: p.name, at, au: d, mag: reduced(p.curve, phase / RAD) + 5 * Math.log10(r * d) };
+        }),
+      };
+    };
+  }
+
+  /* ==========================================================
+     Stars: the real sky over the Bay Area right now, with the Moon and the planets where they are,
+     and now and then a meteor or a satellite
      ========================================================== */
   function Stars(kit) {
     const { ctx, TAU, quiet, makeSprite, rgba, scrollRoom } = kit;
@@ -487,6 +571,132 @@
       });
     });
 
+    /* The Moon and the planets (orbits.js), placed afresh each frame from the time-lapse time. */
+    const ephemeris = Ephemeris();
+    // Point o along a direction given as x, y, z on the J2000 equator.
+    const toward = (o, [x, y, z]) => {
+      const r = Math.hypot(x, y, z);
+      o.ra = Math.atan2(y, x); o.sd = z / r; o.cd = Math.hypot(x, y) / r;
+      return o;
+    };
+    // Each planet takes one of the star tints, picked by eye: Venus white, Mars rust, Uranus pale
+    // blue, the rest the cream of sunlight off cloud tops and dust.
+    const PLANET_TINT = { Mercury: 3, Venus: 2, Mars: 5, Jupiter: 3, Saturn: 3, Uranus: 1 };
+    const planets = (window.SKY_PLANETS || []).filter(([name]) => name !== 'Earth').map(([name]) =>
+      at(0, 0, { name, planet: true, tint: PLANET_TINT[name] ?? 3, au: 0, mag: 99, faint: true, size: 0, base: 0 }));
+    // Sized and lit by magnitude like the stars, except that Venus and Jupiter can outshine Sirius.
+    function lookOf(p, mag) {
+      const t = Math.max(0, Math.min(1.35, (5.5 - mag) / 7));
+      p.mag = mag;
+      p.faint = mag > 4.5;
+      p.size = p.faint ? 0.7 + t * 4 : 3.5 + Math.pow(t, 1.4) * 26;
+      p.base = p.faint ? 0.35 + t * 3 : 0.7 + Math.min(1, t) * 0.3;
+      p.spike = mag < 2 ? spikes[p.tint] : null;
+    }
+    // The Moon, drawn MOON_SIZE times its real size (the way the deep-sky objects are drawn larger than
+    // life), lit from where the Sun really is, with its north toward the ecliptic's (the Moon's axis
+    // stands within a degree and a half of it).
+    const MOON_SIZE = 5;
+    const moon = at(0, 0, { name: 'Moon', moon: true, r: 0, lit: 1, cosPhase: 1, waxing: true, km: 0, sunward: 0, north: 0 });
+    const OBL = (window.SKY_OBLIQUITY || 0) * RAD;
+    const ECLIPTIC_NORTH = [0, -Math.sin(OBL), Math.cos(OBL)];
+    const nudge = at(0, 0);                                      // scratch
+    // From the Moon (direction u), which way on screen the sky leads toward `target`, and how many
+    // pixels a radian of sky takes there.
+    function lean(u, target) {
+      const STEP = 0.01, d = target[0] * u[0] + target[1] * u[1] + target[2] * u[2];
+      const t = [target[0] - d * u[0], target[1] - d * u[1], target[2] - d * u[2]], n = Math.hypot(...t) || 1;
+      project(toward(nudge, [u[0] + STEP * t[0] / n, u[1] + STEP * t[1] / n, u[2] + STEP * t[2] / n]));
+      const dx = nudge.x - moon.x, dy = nudge.y - moon.y;
+      return [Math.atan2(dy, dx), Math.hypot(dx, dy) / STEP];
+    }
+    function placeBodies() {
+      if (!ephemeris) return;
+      const now = ephemeris(skyTime());
+      now.planets.forEach((b, i) => { const p = planets[i]; toward(p, b.at); p.au = b.au; lookOf(p, b.mag); project(p); });
+      // The Moon is near enough that where you stand moves it, by up to a degree: seen from San
+      // Francisco rather than from the Earth's centre, it sits lower in the sky.
+      const g = now.moon, R = window.SKY_MOON.earth;
+      const m = [g[0] - R * cosLat * Math.cos(lst), g[1] - R * cosLat * Math.sin(lst), g[2] - R * sinLat];
+      moon.km = Math.hypot(...m);
+      project(toward(moon, m));
+      // Its phase: the angle at the Moon between the Sun and us. It's waxing while it's east of the
+      // Sun, that is, counterclockwise from it seen from the ecliptic's north.
+      const s = now.sun.map((v) => v * AU_KM), toSun = [s[0] - g[0], s[1] - g[1], s[2] - g[2]];
+      moon.cosPhase = -(toSun[0] * g[0] + toSun[1] * g[1] + toSun[2] * g[2]) / (Math.hypot(...toSun) * Math.hypot(...g));
+      moon.lit = (1 + moon.cosPhase) / 2;
+      const turn = [s[1] * g[2] - s[2] * g[1], s[2] * g[0] - s[0] * g[2], s[0] * g[1] - s[1] * g[0]];
+      moon.waxing = turn[0] * ECLIPTIC_NORTH[0] + turn[1] * ECLIPTIC_NORTH[1] + turn[2] * ECLIPTIC_NORTH[2] > 0;
+      if (moon.alt <= 0) return;
+      const u = m.map((v) => v / moon.km);
+      let perRad;
+      [moon.sunward, perRad] = lean(u, s);
+      [moon.north] = lean(u, ECLIPTIC_NORTH);
+      moon.r = Math.asin(window.SKY_MOON.radius / moon.km) * perRad * MOON_SIZE;
+    }
+    // The Moon's face: its near side photographed by the Lunar Reconnaissance Orbiter (orbits.js), the
+    // dark seas of old lava and the bright highlands, north up and east (Mare Crisium's side) to the
+    // right, as it looks in the sky. Each character is a pixel's brightness, darkest first.
+    const FACE_LEVELS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$';
+    const faceRows = window.SKY_MOON_FACE || [];
+    const face = faceRows.length && makeSprite(faceRows.length, (g, size) => {
+      const c = size / 2, img = g.createImageData(size, size), px = img.data;
+      for (let j = 0; j < size; j++) {
+        for (let i = 0; i < size; i++) {
+          const level = FACE_LEVELS.indexOf(faceRows[j][i]);
+          if (level < 0) continue;
+          // The disc's edge, smoothed over a pixel, a pixel inside the sprite's so it stays round.
+          const edge = Math.max(0, Math.min(1, c - 0.5 - Math.hypot(i + 0.5 - c, j + 0.5 - c)));
+          const b = 0.22 + 0.78 * (level / (FACE_LEVELS.length - 1));
+          const k = (j * size + i) * 4;
+          px[k] = 246 * b; px[k + 1] = 242 * b; px[k + 2] = 232 * b; px[k + 3] = 255 * edge;
+        }
+      }
+      g.putImageData(img, 0, 0);
+    });
+    const moonCanvas = document.createElement('canvas'), mctx2 = moonCanvas.getContext('2d');
+    // The Moon as it looks now, into its own small canvas at the screen's resolution.
+    function paintMoon(r, warm) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2), side = Math.ceil((r * 2 + 2) * dpr);
+      if (moonCanvas.width !== side) moonCanvas.width = moonCanvas.height = side;
+      mctx2.setTransform(1, 0, 0, 1, 0, 0);
+      mctx2.clearRect(0, 0, side, side);
+      mctx2.setTransform(dpr, 0, 0, dpr, side / 2, side / 2);
+      const up = moon.north + Math.PI / 2;                       // turns the face's north to the sky's
+      // Earthshine: sunlight off the Earth faintly lights the dark part, most when the Moon is a thin
+      // crescent (when the Earth, seen from the Moon, is nearly full).
+      mctx2.save();
+      mctx2.rotate(up);
+      mctx2.globalAlpha = 0.05 + 0.12 * (1 - moon.lit);
+      mctx2.drawImage(face, -r, -r, r * 2, r * 2);
+      mctx2.restore();
+      mctx2.globalCompositeOperation = 'source-atop';
+      mctx2.fillStyle = 'rgba(120,150,215,0.5)';
+      mctx2.fillRect(-r - 1, -r - 1, r * 2 + 2, r * 2 + 2);
+      mctx2.globalCompositeOperation = 'source-over';
+      // The sunlit part: the half facing the Sun, bounded by the terminator, which is a circle seen
+      // at an angle: an ellipse bulging into the dark half when gibbous, short of the middle when a crescent.
+      mctx2.save();
+      mctx2.rotate(moon.sunward);
+      const rx = Math.max(0.001, r * Math.abs(moon.cosPhase));
+      mctx2.beginPath();
+      mctx2.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+      if (moon.cosPhase >= 0) mctx2.ellipse(0, 0, rx, r, 0, Math.PI / 2, Math.PI * 1.5, false);
+      else mctx2.ellipse(0, 0, rx, r, 0, Math.PI / 2, -Math.PI / 2, true);
+      mctx2.clip();
+      mctx2.rotate(up - moon.sunward);
+      mctx2.drawImage(face, -r, -r, r * 2, r * 2);
+      mctx2.restore();
+      // Low in the sky it's seen through more air, which takes the blue out of its light.
+      if (warm > 0.02) {
+        mctx2.globalCompositeOperation = 'source-atop';
+        mctx2.fillStyle = `rgba(255,165,90,${0.55 * warm})`;
+        mctx2.fillRect(-r - 1, -r - 1, r * 2 + 2, r * 2 + 2);
+        mctx2.globalCompositeOperation = 'source-over';
+      }
+      return side / dpr;
+    }
+
     // Sky time starts at the real time the scene opens and runs TIME_LAPSE times faster than the
     // animation clock from there, so it holds still while paused and picks up where it left off.
     let lst = 0, scale = 1, st = 1, ct = 0, clockNow = 0, clockStart = null;
@@ -548,6 +758,7 @@
         project(at(o.ra / RAD, Math.asin(o.sd) / RAD + 0.2, northward));
         o.angle = Math.atan2(northward.y - o.y, northward.x - o.x) - o.pa;
       }
+      placeBodies();
       for (const p of grains) project(p);
       project(pole);
       if (Math.abs(lst - mwLst) > 0.25 * RAD || mwW !== kit.w || mwH !== kit.h || mwRoom !== skyRoom()) paintMilkyWay();
@@ -645,14 +856,46 @@
       const era = left < 0 ? `${-left} BC` : left < 1000 ? `${left} AD` : `${left}`;
       return `Light left ${step === 1 ? 'in' : 'around'} ${era} · ${far} light years`;
     }
+    // For the Moon and the planets, sunlight they send back: how long ago it left them, and how far.
+    function lightFrom(km) {
+      const s = km / LIGHT_KM_S;
+      const when = s < 60 ? `${s.toFixed(1)} seconds` : s < 5400 ? `${Math.round(s / 60)} minutes` : `${(s / 3600).toFixed(1)} hours`;
+      const far = km < 1e6 ? `${(Math.round(km / 100) * 100).toLocaleString('en-US')} km`
+        : km < 1e9 ? `${Math.round(km / 1e6)} million km` : `${(km / 1e9).toFixed(1)} billion km`;
+      return `Light left ${when} ago · ${far}`;
+    }
+    function phaseOf(m) {
+      const lit = `${Math.round(m.lit * 100)}% lit`;
+      if (m.lit < 0.03) return `New, ${lit}`;
+      if (m.lit > 0.97) return `Full, ${lit}`;
+      if (Math.abs(m.lit - 0.5) < 0.04) return `${m.waxing ? 'First' : 'Last'} quarter, ${lit}`;
+      return `${m.waxing ? 'Waxing' : 'Waning'} ${m.lit < 0.5 ? 'crescent' : 'gibbous'}, ${lit}`;
+    }
+    // The label's words. The Moon's and the planets' change as the time-lapse runs, so theirs are
+    // worked out again each frame they're shown, and rewritten when they differ.
+    let labelText = '';
+    function fill(item) {
+      const lines = [item.name, ...(item.moon ? [phaseOf(item), lightFrom(item.km)]
+        : item.planet ? [lightFrom(item.au * AU_KM)] : [whenLeft(item.ly)])].filter(Boolean);
+      if (lines.join('\n') === labelText) return;
+      labelText = lines.join('\n');
+      label.textContent = lines[0];
+      for (const line of lines.slice(1)) {
+        const span = document.createElement('span');
+        span.textContent = line;
+        label.appendChild(span);
+      }
+    }
+    const moves = (item) => item && (item.moon || item.planet);
     function show(item, px, py) {
-      if (item === hovered) return position(px, py);
+      if (item === hovered) {
+        if (moves(item)) fill(item);
+        return position(px, py);
+      }
       hovered = item;
       kit.redraw();
       if (!item) { label.classList.remove('show'); return; }
-      label.textContent = item.name;
-      const line = whenLeft(item.ly);
-      if (line) { const span = document.createElement('span'); span.textContent = line; label.appendChild(span); }
+      fill(item);
       label.classList.add('show');
       position(px, py);
     }
@@ -676,6 +919,13 @@
         const d = Math.hypot(s.x - px, s.y - top - py);
         if (d < Math.max(10, s.size * 0.3) && d < bestD + 4) { best = s; bestD = d; }
       }
+      // The planets and the Moon are in front of everything else.
+      for (const p of planets) {
+        if (p.alt <= 0) continue;
+        const d = Math.hypot(p.x - px, p.y - top - py);
+        if (d < Math.max(10, p.size * 0.3) && d < bestD + 6) { best = p; bestD = d; }
+      }
+      if (ephemeris && face && moon.alt > 0 && Math.hypot(moon.x - px, moon.y - top - py) < Math.max(12, moon.r + 4)) best = moon;
       return best;
     }
     // Where a mouse is resting over open sky, to look again as the sky turns under it. Null for a
@@ -697,7 +947,10 @@
       if (!hovered) return;
       const x = hovered.x, y = hovered.y - top;
       if (hovered.alt <= 0 || x < 0 || x > kit.w || y < 0 || y > kit.h || quiet(x, y, 0, 40) < 0.5) show(null);
-      else position(x, y);
+      else {
+        if (moves(hovered)) fill(hovered);
+        position(x, y);
+      }
     }
     window.addEventListener('pointermove', onPointer, { passive: true });
     window.addEventListener('pointerdown', onPointer, { passive: true });
@@ -724,6 +977,53 @@
         }
       }
       return fill;
+    }
+    // A planet is a tiny disc rather than a point, so the air doesn't make it twinkle: it shines steadily.
+    function drawPlanets(top) {
+      for (const p of planets) {
+        if (p.alt <= 0) continue;
+        const x = p.x, y = p.y - top;
+        if (x < -30 || x > kit.w + 30 || y < -30 || y > kit.h + 30) continue;
+        const a = Math.min(1, p.base * air(p.alt) * quiet(x, y, 0.5, 100));
+        if (a < 0.012) continue;
+        ctx.globalAlpha = a;
+        if (p.faint) {
+          ctx.fillStyle = TINTS[p.tint];
+          ctx.fillRect(x - p.size / 2, y - p.size / 2, p.size, p.size);
+        } else {
+          ctx.drawImage(glows[p.tint], x - p.size / 2, y - p.size / 2, p.size, p.size);
+          if (p.spike) { const d = p.size * 1.5; ctx.drawImage(p.spike, x - d / 2, y - d / 2, d, d); }
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawMoon(top) {
+      if (!ephemeris || !face || moon.alt <= 0) return;
+      const x = moon.x, y = moon.y - top, r = moon.r, reach = r * 7;
+      if (x < -reach || x > kit.w + reach || y < -reach || y > kit.h + reach) return;
+      const fade = quiet(x, y, 0.15, 140), clear = air(moon.alt);
+      ctx.save();
+      // Its light scattered by the air around it. A half-lit Moon gives far less than half a full
+      // one's light, so the glow is strong only near full.
+      const glow = 0.16 * Math.pow(moon.lit, 3) * fade * (0.5 + 0.5 * clear);
+      if (glow > 0.003) {
+        const halo = ctx.createRadialGradient(x, y, r * 0.8, x, y, reach);
+        halo.addColorStop(0, `rgba(225,232,255,${glow})`);
+        halo.addColorStop(0.3, `rgba(225,232,255,${glow * 0.25})`);
+        halo.addColorStop(1, 'rgba(225,232,255,0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(x - reach, y - reach, reach * 2, reach * 2);
+      }
+      // It's solid: it hides the stars behind it, the dark part as much as the lit.
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = '#000';
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      const side = paintMoon(r, 1 - clear);
+      ctx.globalAlpha = fade * (0.6 + 0.4 * clear);
+      ctx.drawImage(moonCanvas, x - side / 2, y - side / 2, side, side);
+      ctx.restore();
     }
 
     return {
@@ -793,9 +1093,12 @@
         }
         drawPoints(sky, now, drawPoints(dust, now, -1, top), top);
         ctx.globalAlpha = 1;
+        drawPlanets(top);
+        drawMoon(top);
 
         if (hovered && hovered.alt > 0) {
-          const x = hovered.x, y = hovered.y - top, r = Math.max(7, (hovered.kind ? hovered.size * 0.35 : hovered.size * 0.22)) + 3;
+          const x = hovered.x, y = hovered.y - top;
+          const r = hovered.moon ? hovered.r + 4 : Math.max(7, (hovered.kind ? hovered.size * 0.35 : hovered.size * 0.22)) + 3;
           ctx.strokeStyle = 'rgba(255,255,255,0.45)';
           ctx.lineWidth = 1;
           ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
