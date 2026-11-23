@@ -14,9 +14,11 @@ The site lives in `public/`. `wrangler.jsonc` tells Cloudflare to serve that fol
 | `public/season.js` | Works out the season before the page paints |
 | `public/render.js` | Fills the page from `content.js` |
 | `public/backgrounds.js` | The animated backgrounds, and switching between them |
-| `public/stars.js` | The `stars` background. Loaded, with `sky.js`, only when that background is picked |
+| `public/stars.js` | The `stars` background, including where the Moon and planets are at any moment. Loaded, with `sky.js` and `orbits.js`, only when that background is picked |
 | `public/sky.js` | The real sky for the `stars` background: every naked-eye star, the Milky Way, and 125 galaxies, nebulae and clusters. Built by `tools/pack_sky.py`; don't edit by hand |
 | `tools/pack_sky.py` | Downloads the star catalogs and builds `public/sky.js` from them (see "The sky's data" below) |
+| `public/orbits.js` | How the Moon and planets move, and the Moon's face, for the `stars` background. Built by `tools/pack_orbits.py`; don't edit by hand |
+| `tools/pack_orbits.py` | Downloads JPL's planet tables, the ELP 2000-82B lunar theory and NASA's map of the Moon, and builds `public/orbits.js` from them |
 | `public/fonts/` | Doto in two weights, with its license |
 | `public/favicon.svg`, `favicon.ico`, `apple-touch-icon.png` | The icon: a dot-matrix "K". The PNG and ICO are rendered from the SVG (square corners, since iOS rounds them itself) |
 | `public/og.png` | The 1200×630 card shown when the link is shared. The `og:` tags in `index.html` point to it at `https://khush.sh/og.png`; regenerate it if the name or intro changes |
@@ -25,7 +27,11 @@ The site lives in `public/`. `wrangler.jsonc` tells Cloudflare to serve that fol
 
 There are six, all drawn in code: `life` (Conway's Game of Life), `stars`, `autumn` (falling leaves of ten species), `sunlight` (leaf shadows swaying on a pale wall), `winter` (snowfall) and `garden` (a wildflower meadow). Every one moves with the page as you scroll, slower than the text, so it feels like there's more world behind it.
 
-`stars` is the real sky over the Bay Area, facing south. It opens on the sky as it is at that moment, with the constellations where they actually are, then runs as a gentle time-lapse (a minute of sky every second, `TIME_LAPSE` in `backgrounds.js`) so you can watch it wheel west the way the Earth turns it. Paused, or with reduced motion, it holds still. Everything in it comes from published catalogs: the stars down to the faintest the eye can see, the Milky Way, and the galaxies, nebulae and star clusters (drawn larger than life, the way a long exposure shows them). Hover (or tap) a bright star or an object for its name and when the light reaching you now set out.
+`stars` is the real sky over the Bay Area, facing south. It opens on the sky as it is at that moment, with the constellations where they actually are, then runs as a gentle time-lapse (a minute of sky every second, `TIME_LAPSE` in `stars.js`) so you can watch it wheel west the way the Earth turns it. Paused, or with reduced motion, it holds still. Everything in it comes from published catalogs: the stars down to the faintest the eye can see, the Milky Way, and the galaxies, nebulae and star clusters (drawn larger than life, the way a long exposure shows them).
+
+The Moon and the planets are there too, worked out for the moment on screen. The Moon shows its real phase, lit from where the Sun is, with its dark part faintly lit by earthshine and a glow around it near full. It's placed as seen from San Francisco rather than the Earth's centre, which moves it by up to a degree. Its face is NASA's photograph of the near side. It's drawn five times its real size (`MOON_SIZE` in `stars.js`), like the galaxies, and it hides whatever is behind it. Mercury, Venus, Mars, Jupiter, Saturn and Uranus are sized by how bright they are right then, and shine steadily instead of twinkling, the way planets do. Neptune is left out: it never gets bright enough to see. Colours are picked by eye.
+
+Hover (or tap) a bright star or an object for its name and when the light reaching you now set out. The Moon also shows its phase, and the Moon and planets show their distance.
 
 - **Choose the default** with `background` in `content.js`. `'season'` (the default) follows the time of year: winter in Dec–Feb, garden in Mar–May, sunlight in Jun–Aug, autumn in Sep–Nov. Or name one, e.g. `background: 'stars'`.
 - **Preview** any of them by adding `?bg=winter` (or any name) to the address.
@@ -52,6 +58,24 @@ Because HYG and OpenNGC are CC BY-SA 4.0, `sky.js` is too. To rebuild it:
 python3 tools/pack_sky.py fetch sky-data     # downloads the sources (about 40 MB)
 python3 tools/pack_sky.py build sky-data public/sky.js
 ```
+
+`public/orbits.js`, the Moon and the planets, has its own build so either file can be rebuilt without the other:
+
+| What | Source |
+| --- | --- |
+| Planet orbits | JPL, [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html) (E. M. Standish): Keplerian elements and their rates (Table 1, good for 1800–2050), and the obliquity used to turn them into sky coordinates |
+| Planet brightness | [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/): each planet's magnitude every 3 days from 2000 to 2050 (Horizons uses Mallama & Hilton 2018), brought to 1 au to give a curve of brightness against phase angle. A thin crescent Venus keeps its real glare; Saturn's rings are averaged over their tilts |
+| The Earth's radius | JPL, [Planetary Physical Parameters](https://ssd.jpl.nasa.gov/planets/phys_par.html), for the Moon's parallax |
+| The Moon's motion | [ELP 2000-82B](https://cdsarc.cds.unistra.fr/viz-bin/cat/VI/79) (Chapront-Touzé & Chapront 1988, VizieR VI/79): the main problem's series, cut to terms of at least 6″ (longitude, latitude) and 10 km (distance), with the constants from its reference routine `elp82b.f` |
+| The Moon's size | JPL, [Planetary Satellite Physical Parameters](https://ssd.jpl.nasa.gov/sats/phys_par/): its mean radius |
+| The Moon's face | NASA's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) (Ernie Wright, NASA Scientific Visualization Studio): the LRO Camera colour map, as 96×96 levels of brightness |
+
+```sh
+python3 tools/pack_orbits.py fetch orbit-data     # downloads the sources (about 8 MB)
+python3 tools/pack_orbits.py build orbit-data public/orbits.js
+```
+
+Checked against [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) from 2000 to 2050, the Moon lands within 2′ of where it really is, as seen from San Francisco. That's a third of a pixel in a 1440×900 window. Mercury, Venus, Mars, Uranus and the Sun (which sets the phase) are within 3′. Jupiter and Saturn are within 11′, the accuracy JPL gives for these tables, about 1.7 pixels. The tables run out in 2050.
 
 ## Common edits
 
