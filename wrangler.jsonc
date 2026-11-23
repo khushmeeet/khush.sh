@@ -5,5 +5,8 @@
   "compatibility_date": "2026-09-30",
   "assets": {
     "directory": "./public"
-  }
+  },
+  // Lets `npx wrangler preview` publish this branch to its own preview URL. Empty: the assets and
+  // settings above apply to previews too.
+  "previews": {}
 }
