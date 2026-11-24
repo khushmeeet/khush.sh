@@ -1825,8 +1825,9 @@
     winter: Winter,
   };
   // Scenes kept in their own files, fetched the first time they're picked. Stars needs the star
-  // catalog (sky.js) and the Moon's and planets' motions (orbits.js), which no other background uses.
-  const LATER = { stars: ['sky.js', 'orbits.js', 'stars.js'] };
+  // catalog (sky.js), the Moon's and planets' motions (orbits.js) and the meteor showers (meteors.js),
+  // which no other background uses.
+  const LATER = { stars: ['sky.js', 'orbits.js', 'meteors.js', 'stars.js'] };
   const fetching = {};
   function fetchScene(name) {
     fetching[name] = fetching[name] || Promise.all(LATER[name].map((src) => new Promise((done, fail) => {
