@@ -1,8 +1,8 @@
 // The stars background, kept apart from backgrounds.js because it's the only one that needs the star
-// catalog in sky.js (165 KB) and the Moon's and planets' motions in orbits.js. backgrounds.js loads
-// those and this file the first time stars is picked, then calls Stars(kit): `kit` holds what it
-// shares with the other backgrounds (the canvas, the window's size, the scroll position, where the
-// text is, and the drawing helpers).
+// catalog in sky.js (165 KB), the Moon's and planets' motions in orbits.js and the meteor showers in
+// meteors.js. backgrounds.js loads those and this file the first time stars is picked, then calls
+// Stars(kit): `kit` holds what it shares with the other backgrounds (the canvas, the window's size,
+// the scroll position, where the text is, and the drawing helpers).
 
 (() => {
   window.laterScenes = window.laterScenes || {};
@@ -92,7 +92,7 @@
 
   /* ==========================================================
      Stars: the real sky over the Bay Area right now, with the Moon and the planets where they are,
-     and now and then a meteor or a satellite
+     meteors (a few every night, and showers on their dates), and now and then a satellite
      ========================================================== */
   function Stars(kit) {
     const { ctx, TAU, quiet, makeSprite, rgba, scrollRoom } = kit;
@@ -614,6 +614,9 @@
       if (!ephemeris) return;
       const now = ephemeris(skyTime());
       now.planets.forEach((b, i) => { const p = planets[i]; toward(p, b.at); p.au = b.au; lookOf(p, b.mag); project(p); });
+      // The Sun's longitude along the ecliptic, which the meteor showers keep to.
+      const [sx, sy, sz] = now.sun;
+      sunLon = (Math.atan2(sy * Math.cos(OBL) + sz * Math.sin(OBL), sx) / RAD + 360) % 360;
       // The Moon is near enough that where you stand moves it, by up to a degree: seen from San
       // Francisco rather than from the Earth's centre, it sits lower in the sky.
       const g = now.moon, R = window.SKY_MOON.earth;
@@ -699,8 +702,10 @@
 
     // Sky time starts at the real time the scene opens and runs TIME_LAPSE times faster than the
     // animation clock from there, so it holds still while paused and picks up where it left off.
+    // ?sky=2026-12-14T02:00-08:00 in the address opens on that moment instead, to see a shower ahead of time.
     let lst = 0, scale = 1, st = 1, ct = 0, clockNow = 0, clockStart = null;
-    const skyStart = Date.now();
+    const asked = Date.parse(new URLSearchParams(location.search).get('sky') || '');
+    const skyStart = Number.isFinite(asked) ? asked : Date.now();
     const lstAt = (ms) => {
       const days = ms / 86400000 + 2440587.5 - 2451545;              // since J2000
       return ((280.46061837 + 360.98564736629 * days + LON) % 360) * RAD;
@@ -717,6 +722,18 @@
       const k = scale / (1 + ahead);
       o.x = kit.w / 2 - east * k;
       o.y = kit.h / 2 - above * k;
+    }
+    // Undo the projection: from a point on the sky's canvas (before any scrolling) back to a direction
+    // in the sky, as east, north and up. Returns how far out from the view's centre it is, squared, in
+    // the projection's own measure (0 at the centre, 1 at 90 degrees away).
+    const look = [0, 0, 0];                                      // scratch
+    function unproject(X, Y, out) {
+      const u = (kit.w / 2 - X) / scale, v = (kit.h / 2 - Y) / scale, rr = u * u + v * v;
+      const above = (2 * v) / (1 + rr), ahead = (1 - rr) / (1 + rr);
+      out[0] = (2 * u) / (1 + rr);
+      out[1] = -ahead * ct + above * st;
+      out[2] = ahead * st + above * ct;
+      return rr;
     }
     // Starlight lost on its way down through the air: about 0.2 magnitudes per airmass on a clear
     // night near sea level, with the airmass from Kasten & Young (1989). The eye judges brightness in
@@ -741,6 +758,15 @@
         if (ahead * Math.sin(mid) + above * Math.cos(mid) < Math.sin(BOTTOM_ALT)) lo = mid; else hi = mid;
       }
       st = Math.sin(hi); ct = Math.cos(hi);
+      // How much sky the window takes in (steradians), which sets how many meteors cross it.
+      skySr = 0;
+      const N = 48, cell = (kit.w / N) * (kit.h / N) / (scale * scale);
+      for (let j = 0; j < N; j++) {
+        for (let i = 0; i < N; i++) {
+          const rr = unproject((i + 0.5) * kit.w / N, (j + 0.5) * kit.h / N, look);
+          if (look[2] > 0) skySr += 4 * cell / ((1 + rr) * (1 + rr));   // the projection's stretch, undone
+        }
+      }
       // Bigger than life, the way a long exposure shows them; the biggest still biggest.
       const perDeg = (scale / 2) * RAD;                                // pixels per degree, mid-screen
       for (const o of objects) o.size = (o.kind === 'planetary' ? 10 : 16) + Math.sqrt(o.deg) * 42 * (perDeg / 9.66);
@@ -784,11 +810,8 @@
       const img = mctx.createImageData(milky.width, milky.height), px = img.data;
       for (let j = 0; j < milky.height; j++) {
         for (let i = 0; i < milky.width; i++) {
-          // Undo the projection: from this pixel back to a direction in the sky.
-          const X = (i + 0.5) / MW_SCALE - MW_PAD, Y = (j + 0.5) / MW_SCALE - MW_PAD;
-          const u = (kit.w / 2 - X) / scale, v = (kit.h / 2 - Y) / scale, rr = u * u + v * v;
-          const east = (2 * u) / (1 + rr), above = (2 * v) / (1 + rr), ahead = (1 - rr) / (1 + rr);
-          const north = -ahead * ct + above * st, up = ahead * st + above * ct;
+          unproject((i + 0.5) / MW_SCALE - MW_PAD, (j + 0.5) / MW_SCALE - MW_PAD, look);
+          const east = look[0], north = look[1], up = look[2];
           if (up <= 0) continue;
           const dec = Math.asin(Math.max(-1, Math.min(1, north * cosLat + up * sinLat)));
           const ha = Math.atan2(-east, up * cosLat - north * sinLat);
@@ -956,7 +979,189 @@
     window.addEventListener('pointerdown', onPointer, { passive: true });
     document.addEventListener('pointerout', onLeave);
 
-    let meteor = null, nextMeteor = 6000, satellite = null, nextSatellite = 20000;
+    /* Meteors: a few every night from anywhere (sporadic meteors), and on a shower's dates many more,
+       all streaking away from its radiant (meteors.js). Their numbers follow the International
+       Meteor Organization's (IMO) way of counting them:
+       - A shower's ZHR is how many one observer would see in an hour under a sky showing stars to
+         magnitude 6.5 with the radiant straight overhead. With it at altitude h they see ZHR sin h
+         (the IMO's table for a ZHR of 100: 94 at 70 degrees, 77 at 50, 50 at 30); below the horizon, none.
+       - That observer takes in a field about 105 degrees across (the IMO's FAQ, which finds only 2% of
+         meteors seen outside it), so a window showing more sky than that shows more meteors, in proportion.
+       - Sporadic meteors: "roughly 5 to 15 sporadic meteors per hour, under excellent skies", by the
+         time of day and the season (the IMO's Handbook for Meteor Observers), which puts the change
+         down to where their sources sit, the busiest being the apex, the way the Earth is heading. It
+         climbs from midnight to dawn; so here, 5 an hour with the apex straight down, rising to 15 with
+         it straight up. Their radiants are anywhere.
+       And each one where it really would be:
+       - It lights up about 100 km up and burns out by about 80 (the heights the IMO's guide to minor
+         showers works with), at the speed it meets the air, so its path on the sky, its length and how
+         fast it crosses all come out as they would. Sporadic meteors meet the air at anything from
+         11.2 km/s (falling in from rest) to 72.9 (met head on; the Handbook), faster the nearer their
+         radiant is to the apex.
+       - Each magnitude brighter, r times fewer (the shower's population index; 3.4 for sporadic
+         meteors, Jenniskens 1994), down to the 6.5 the ZHR counts to. So most are faint.
+       Moonlight, which drowns the fainter ones, is left out, as it is for the stars. */
+    const FIELD = TAU * (1 - Math.cos(52.5 * RAD));             // the observer's 105-degree field, in steradians
+    const SPORADIC = [5, 15];                                    // an hour: apex straight down, straight up
+    const BEGIN_KM = 100, END_KM = 80;
+    const SLOWEST = 11.2, FASTEST = 72.9;                        // km/s
+    const LIMIT = 6.5;                                           // the faintest meteor a ZHR counts
+    const SPORADIC_R = window.SKY_SPORADIC_R;
+    const EARTH_KM = window.SKY_MOON ? window.SKY_MOON.earth : 0;
+    // Picked by eye: how long a stretch of its path stays lit behind a meteor (seconds), and the longest
+    // path drawn, for one skimming in nearly level (km).
+    const TRAIL_S = 0.25, LONGEST_KM = 300;
+    const showers = (window.SKY_SHOWERS || []).map(([code, name, start, peak, end, speed, r, parts, track]) =>
+      ({ code, name, start, peak, end, speed, r, parts, track, hr: 0, ra: 0, dec: 0, at: [0, 0, 0] }));
+    let sunLon = null, skySr = 0, sporadicHr = 0;
+    const apex = [0, 0, 0];
+    const nearer = (deg) => ((deg % 360) + 540) % 360 - 180;   // an angle as the shorter way round, -180 to 180
+    // A shower's ZHR with the Sun at longitude `lon`: none outside its activity, and through it, each
+    // part of its profile falling away from the peak at its own pace.
+    function zhrOf(s, lon) {
+      if ((lon - s.start + 360) % 360 > (s.end - s.start + 360) % 360) return 0;
+      const d = nearer(lon - s.peak);
+      let zhr = 0;
+      for (const [top, before, after] of s.parts) zhr += top * Math.pow(10, -(d < 0 ? before : after) * Math.abs(d));
+      return zhr;
+    }
+    // Where its radiant is: between the calendar's positions, or carried on past its first or last.
+    function radiantOf(s, lon) {
+      const t = s.track;
+      if (t.length === 1) { s.ra = t[0][1]; s.dec = t[0][2]; return; }
+      const from = (l) => (l - t[0][0] + 360) % 360, last = from(t[t.length - 1][0]);
+      let x = from(lon);
+      if (x > last + (360 - last) / 2) x -= 360;               // a little before the first
+      let i = 0;
+      while (i < t.length - 2 && from(t[i + 1][0]) < x) i++;
+      const a = t[i], b = t[i + 1], f = (x - from(a[0])) / (from(b[0]) - from(a[0]));
+      s.ra = a[1] + nearer(b[1] - a[1]) * f;
+      s.dec = a[2] + (b[2] - a[2]) * f;
+    }
+    // A direction on the sky (degrees) as east, north and up from here, at this moment.
+    function horizon(raDeg, decDeg, out) {
+      const ha = lst - raDeg * RAD, cd = Math.cos(decDeg * RAD), sd = Math.sin(decDeg * RAD), ch = Math.cos(ha);
+      out[0] = -cd * Math.sin(ha);
+      out[1] = sd * cosLat - cd * sinLat * ch;
+      out[2] = sd * sinLat + cd * cosLat * ch;
+      return out;
+    }
+    // How many meteors an hour one observer would see right now, of each shower and sporadic.
+    function meteorRates() {
+      if (sunLon === null) return 0;
+      let total = 0;
+      for (const s of showers) {
+        const zhr = zhrOf(s, sunLon);
+        s.hr = 0;
+        if (!zhr) continue;
+        radiantOf(s, sunLon);
+        const up = horizon(s.ra, s.dec, s.at)[2];               // the sine of the radiant's altitude
+        if (up > 0) total += (s.hr = zhr * up);
+      }
+      // The apex is on the ecliptic, 90 degrees west of the Sun.
+      const l = (sunLon - 90) * RAD, y = Math.sin(l) * Math.cos(OBL), z = Math.sin(l) * Math.sin(OBL);
+      horizon(Math.atan2(y, Math.cos(l)) / RAD, Math.asin(z) / RAD, apex);
+      sporadicHr = SPORADIC[0] + (SPORADIC[1] - SPORADIC[0]) * (1 + apex[2]) / 2;
+      return total + sporadicHr;
+    }
+    // How many of `mean` expected things actually happen (a Poisson draw).
+    function howMany(mean) {
+      let n = 0, p = Math.exp(-mean), sum = p;
+      const u = rand();
+      while (u > sum && n < 50) { n++; p *= mean / n; sum += p; }
+      return n;
+    }
+    const meteors = [];
+    // Start the meteors due in this frame: dt of animation is dt * TIME_LAPSE of sky.
+    function spawnMeteors(now, dt) {
+      if (!EARTH_KM || !SPORADIC_R || !skySr) return;
+      const total = meteorRates();
+      for (let n = howMany(total * (skySr / FIELD) * (dt * TIME_LAPSE / 3600000)); n > 0; n--) {
+        let pick = rand() * total, source = null;
+        for (const s of showers) if ((pick -= s.hr) < 0) { source = s; break; }
+        launch(now, source);
+      }
+    }
+    function launch(now, shower) {
+      // Where: anywhere on screen, spread evenly over the sky (the projection stretches it toward the edges).
+      const top = kit.scroll * SKY_K;
+      let found = false;
+      for (let tries = 0; tries < 12 && !found; tries++) {
+        const rr = unproject(rand() * kit.w, top + rand() * kit.h, look);
+        found = look[2] > 0.03 && rand() < 1 / ((1 + rr) * (1 + rr));
+      }
+      if (!found) return;
+      // From where, how fast, and how bright.
+      let from, speed, r;
+      if (shower) {
+        from = shower.at; speed = shower.speed; r = shower.r;
+      } else {
+        // As for a shower, more of them come in from radiants high up than low down.
+        const alt = Math.asin(Math.sqrt(rand())), az = rand() * TAU;
+        from = [Math.cos(alt) * Math.sin(az), Math.cos(alt) * Math.cos(az), Math.sin(alt)];
+        speed = SLOWEST + (FASTEST - SLOWEST) * (1 + from[0] * apex[0] + from[1] * apex[1] + from[2] * apex[2]) / 2;
+        r = SPORADIC_R;
+      }
+      // Its path, a straight line away from the radiant through the point 90 km up in that direction,
+      // from 100 km down to 80 measured from the ground beneath it (the Earth curving away).
+      const mid = (BEGIN_KM + END_KM) / 2, R = EARTH_KM, u = look[2];
+      const dist = -R * u + Math.sqrt(R * R * u * u + 2 * R * mid + mid * mid);
+      const M = [look[0] * dist, look[1] * dist, look[2] * dist];
+      const sink = (from[0] * M[0] + from[1] * M[1] + from[2] * (M[2] + R)) / Math.hypot(M[0], M[1], M[2] + R);
+      if (sink <= 0) return;                                   // the radiant is below its horizon there
+      const half = Math.min(LONGEST_KM, (BEGIN_KM - END_KM) / sink) / 2;
+      const fast = Math.max(0, Math.min(1, (speed - 25) / 40));
+      meteors.push({
+        start: now, speed, life: (2 * half / speed) * 1000,
+        begin: [M[0] + from[0] * half, M[1] + from[1] * half, M[2] + from[2] * half],
+        heading: [-from[0], -from[1], -from[2]],
+        mag: LIMIT + Math.log(1 - rand()) / Math.log(r),
+        // Picked by eye: fast meteors burn green-white (magnesium, oxygen), slow ones yellow (sodium, iron).
+        head: [255 - 20 * fast, 238 + 17 * fast, 205 + 35 * fast],
+      });
+    }
+    // A point on a meteor's path (km east, north and up from here) to the screen.
+    const point = [0, 0, 0], ends = [{ x: 0, y: 0, alt: 0 }, { x: 0, y: 0, alt: 0 }];
+    function onScreen(m, s, o) {
+      const d = m.speed * Math.max(0, s);
+      for (let k = 0; k < 3; k++) point[k] = m.begin[k] + m.heading[k] * d;
+      const n = Math.hypot(point[0], point[1], point[2]), east = point[0] / n, north = point[1] / n, up = point[2] / n;
+      const ahead = -north * ct + up * st, above = north * st + up * ct, k = scale / (1 + ahead);
+      o.x = kit.w / 2 - east * k; o.y = kit.h / 2 - above * k; o.alt = Math.asin(up);
+      return o;
+    }
+    function drawMeteors(now, top) {
+      ctx.lineCap = 'round';
+      for (const m of meteors) {
+        const s = (now - m.start) / 1000, p = (now - m.start) / m.life;
+        if (p < 0 || p >= 1) continue;
+        const [head, tail] = ends;
+        onScreen(m, s, head);
+        onScreen(m, s - TRAIL_S, tail);
+        const hx = head.x, hy = head.y - top, tx = tail.x, ty = tail.y - top;
+        // It brightens as it goes deeper, flares late, then goes out. At its brightest it's as bright
+        // as a star of the same magnitude is drawn (see the faint stars), dimmed the same way by the air.
+        const flare = Math.sin(Math.PI * Math.pow(p, 1.4));
+        const a = Math.min(1, 0.22 + 0.3 * (LIMIT - m.mag)) * flare * air(head.alt) * quiet(hx, hy, 0.15, 120);
+        if (a < 0.01) continue;
+        const grad = ctx.createLinearGradient(hx, hy, tx, ty);
+        grad.addColorStop(0, rgba(m.head, a));
+        grad.addColorStop(0.3, rgba([255, 220, 170], a * 0.6));
+        grad.addColorStop(1, rgba([255, 170, 110], 0));
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.min(3, 0.7 + 0.35 * (LIMIT - m.mag));
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+        // A bright one's head glows like a bright star's.
+        if (m.mag < 2) {
+          const size = Math.min(40, 4 + (2 - m.mag) * 6);
+          ctx.globalAlpha = a;
+          ctx.drawImage(glows[2], hx - size / 2, hy - size / 2, size, size);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    let satellite = null, nextSatellite = 20000;
     function drawPoints(list, now, fill, top) {
       for (const s of list) {
         if (s.alt <= 0) continue;
@@ -1037,21 +1242,12 @@
         document.removeEventListener('pointerout', onLeave);
         label.remove();
       },
-      update(now) {
+      update(now, dt) {
         if (clockStart === null) clockStart = now;
         clockNow = now;
         placeSky();
-        if (!meteor && now > nextMeteor) {
-          const fromRight = rand() < 0.5;
-          meteor = {
-            x: fromRight ? kit.w * (0.75 + rand() * 0.3) : kit.w * (0.05 + rand() * 0.25),
-            y: -20 + rand() * kit.h * 0.25,
-            angle: fromRight ? Math.PI * (0.72 + rand() * 0.08) : Math.PI * (0.2 + rand() * 0.08),
-            start: now, life: 700 + rand() * 500, length: 90 + rand() * 90,
-          };
-          nextMeteor = now + 12000 + rand() * 20000;
-        }
-        if (meteor && now - meteor.start > meteor.life) meteor = null;
+        spawnMeteors(now, dt);
+        for (let i = meteors.length - 1; i >= 0; i--) if (now - meteors[i].start >= meteors[i].life) meteors.splice(i, 1);
         // A satellite: a steady dot crossing the top of the sky, slowly.
         if (!satellite && now > nextSatellite) {
           const ltr = rand() < 0.5;
@@ -1111,22 +1307,7 @@
           ctx.beginPath(); ctx.arc(x, y, 0.8, 0, TAU); ctx.fill();
           ctx.globalAlpha = 1;
         }
-        if (meteor) {
-          const p = (now - meteor.start) / meteor.life;
-          const dist = p * Math.max(kit.w, kit.h) * 0.4;
-          const hx = meteor.x + Math.cos(meteor.angle) * dist, hy = meteor.y + Math.sin(meteor.angle) * dist;
-          const tx = hx - Math.cos(meteor.angle) * meteor.length, ty = hy - Math.sin(meteor.angle) * meteor.length;
-          const a = Math.sin(p * Math.PI) * 0.8 * quiet(hx, hy, 0.15, 120);
-          const grad = ctx.createLinearGradient(hx, hy, tx, ty);
-          // A hot white-green head (burning metals) cooling to an orange trail.
-          grad.addColorStop(0, `rgba(235,255,240,${a})`);
-          grad.addColorStop(0.3, `rgba(255,220,170,${a * 0.6})`);
-          grad.addColorStop(1, 'rgba(255,170,110,0)');
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 1.1;
-          ctx.lineCap = 'round';
-          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
-        }
+        drawMeteors(now, top);
       },
     };
   }
