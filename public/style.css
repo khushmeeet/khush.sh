@@ -442,19 +442,23 @@ html.show-tweaks .tweaks {
 #backdrop-base[hidden] { display: none; }
 
 /* Sunlight: three layers of leaf shadows, each swaying at its own pace around the top-right corner,
-   where the branches would be. Pure CSS motion: nothing is redrawn. */
+   where the branches would be. Pure CSS motion: nothing is redrawn. Each layer is a mask over a
+   plain colour, so the light's colour (--sun-glow) and the shadows' (--sun-shadow), which
+   backgrounds.js sets from where the Sun is, change without repainting anything. */
 #sun-layers {
   position: fixed;
   inset: 0;
   height: 100lvh;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 85% 0%, rgba(255, 249, 238, 0.95), rgba(255, 249, 238, 0) 62%);
+  background: radial-gradient(120% 90% at 85% 0%, rgb(var(--sun-glow, 255 249 238) / 0.95), rgb(var(--sun-glow, 255 249 238) / 0) 62%);
 }
 #sun-layers[hidden] { display: none; }
 #sun-layers > div {
   position: absolute;
-  background-size: 100% 100%;
+  background: var(--sun-shadow, rgb(70 72 78));
+  -webkit-mask: linear-gradient(transparent, transparent) 0 0 / 100% 100%;   /* until its picture arrives */
+  mask: linear-gradient(transparent, transparent) 0 0 / 100% 100%;
   transform-origin: 100% 0;
   will-change: transform;
 }

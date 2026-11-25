@@ -785,6 +785,7 @@
         o.angle = Math.atan2(northward.y - o.y, northward.x - o.x) - o.pa;
       }
       placeBodies();
+      placeGlow();
       for (const p of grains) project(p);
       project(pole);
       if (Math.abs(lst - mwLst) > 0.25 * RAD || mwW !== kit.w || mwH !== kit.h || mwRoom !== skyRoom()) paintMilkyWay();
@@ -845,6 +846,60 @@
       }
       hctx.putImageData(img, 0, 0);
     }
+    /* The sky's own light. The Sun over the Bay Area lights the air (sun.js): the sky is blue by day,
+       glows low in the west as the Sun sets (the right of this south-facing view), turns the deep
+       blue of dusk, then goes black. It's shown far dimmer than it is, so the stars still stand out
+       by day: black at or below GLOW_NIGHT and up to GLOW_MAX (a luminance on screen, white being 1)
+       at GLOW_DAY, both log10 cd/m2. Colours look greyer the dimmer they are, so they're made
+       GLOW_CHROMA times as rich to make up for it. All of these are picked by eye. */
+    const sun = kit.sun;
+    const GLOW_NIGHT = -2.5, GLOW_DAY = 3.5, GLOW_MAX = 0.05, GLOW_CURVE = 2, GLOW_CHROMA = 1.6;
+    const WHITE_X = 0.3127, WHITE_Y = 0.329;                    // sRGB's white (D65)
+    const GLOW_SCALE = 1 / 16;                                  // it's smooth: a pixel every 16 is plenty
+    const glow = document.createElement('canvas'), gctx = glow.getContext('2d');
+    const tone = [0, 0, 0];                                     // scratch
+    let sunNow = null, glowAlt = null, glowAz = null, glowKey = '', glowLit = false, ground = '';
+    // The sky's colour toward a point on the sky's canvas, as 0-255 sRGB into px at k.
+    function glowAt(table, X, Y, px, k) {
+      unproject(X, Y, look);
+      const alt = Math.asin(Math.max(-1, Math.min(1, look[2]))) / RAD;
+      let round = Math.abs(Math.atan2(look[0], look[1]) / RAD - sunNow.az) % 360;
+      if (round > 180) round = 360 - round;
+      const [logL, x, y] = table(alt, round, tone);
+      const t = Math.pow(Math.max(0, Math.min(1, (logL - GLOW_NIGHT) / (GLOW_DAY - GLOW_NIGHT))), GLOW_CURVE);
+      const rgb = sun.rgbOf(WHITE_X + GLOW_CHROMA * (x - WHITE_X), WHITE_Y + GLOW_CHROMA * (y - WHITE_Y), GLOW_MAX * t);
+      for (let c = 0; c < 3; c++) px[k + c] = Math.round(255 * sun.encode(Math.max(0, Math.min(1, rgb[c]))));
+      px[k + 3] = 255;
+    }
+    // Repainted as the Sun moves a tenth of a degree, which the time-lapse takes about half a second to do.
+    function placeGlow() {
+      if (!sun) return;
+      sunNow = sun.at(skyTime());
+      const room = skyRoom(), key = `${kit.w}|${kit.h}|${room}`;
+      if (key === glowKey && Math.abs(sunNow.alt - glowAlt) < 0.1 && Math.abs(sunNow.az - glowAz) < 0.25) return;
+      glowKey = key; glowAlt = sunNow.alt; glowAz = sunNow.az;
+      // Dark everywhere once the Sun is far enough down: nothing to paint.
+      glowLit = sunNow.alt > window.SUN_ROWS[0];
+      const px = [0, 0, 0, 0];
+      if (glowLit) {
+        const gw = Math.ceil(kit.w * GLOW_SCALE) + 1, gh = Math.ceil((kit.h + room) * GLOW_SCALE) + 1;
+        if (glow.width !== gw || glow.height !== gh) { glow.width = gw; glow.height = gh; }
+        const img = gctx.createImageData(gw, gh), table = sun.sky(sunNow.alt);
+        for (let j = 0; j < gh; j++) {
+          for (let i = 0; i < gw; i++) glowAt(table, (i + 0.5) / GLOW_SCALE, (j + 0.5) / GLOW_SCALE, img.data, (j * gw + i) * 4);
+        }
+        gctx.putImageData(img, 0, 0);
+        // The page behind the text takes the sky's colour there, so the halo round the letters matches it.
+        glowAt(table, kit.w / 2, (kit.text.top + kit.text.bottom) / 2 + kit.scroll * SKY_K, px, 0);
+      }
+      const now = glowLit ? `rgb(${px[0]} ${px[1]} ${px[2]})` : '';
+      if (now !== ground) {
+        ground = now;
+        if (now) document.documentElement.style.setProperty('--ground', now);
+        else document.documentElement.style.removeProperty('--ground');
+      }
+    }
+
     // The grain is sharp, so it's drawn where it is exactly, every frame.
     function drawGrain(top) {
       let fill = -1;
@@ -1241,6 +1296,7 @@
         window.removeEventListener('pointerdown', onPointer);
         document.removeEventListener('pointerout', onLeave);
         label.remove();
+        document.documentElement.style.removeProperty('--ground');
       },
       update(now, dt) {
         if (clockStart === null) clockStart = now;
@@ -1270,6 +1326,11 @@
         ctx.save();
         ctx.globalCompositeOperation = 'destination-out';
         ctx.drawImage(hush, 0, 0, hush.width / MW_SCALE, hush.height / MW_SCALE);
+        // The sky's own light, behind the Milky Way.
+        if (glowLit) {
+          ctx.globalCompositeOperation = 'destination-over';
+          ctx.drawImage(glow, 0, -top, glow.width / GLOW_SCALE, glow.height / GLOW_SCALE);
+        }
         ctx.restore();
         drawGrain(top);
         for (const o of objects) {

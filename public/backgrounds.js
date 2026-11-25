@@ -1191,6 +1191,107 @@
   }
 
   /* ==========================================================
+     The Sun over the Bay Area, for Sunlight and Stars: where it is at a moment, and the colour of
+     its light and of the sky with it at that height. The colours come from sun.js, which
+     tools/pack_sun.py works out from the real spectrum of sunlight and the Bay Area's real air.
+     ========================================================== */
+  const BAY_LAT = 37.77, BAY_LON = -122.42;               // San Francisco, as in stars.js
+  // The moment the backgrounds show: now, or the one in ?sky=2026-11-23T16:50-08:00, running on in
+  // real time from there.
+  const skyAsked = Date.parse(new URLSearchParams(location.search).get('sky') || '');
+  const pageOpened = Date.now();
+  const shownNow = () => (Number.isFinite(skyAsked) ? skyAsked + (Date.now() - pageOpened) : Date.now());
+  let theSun = null;
+  function sunKit() {
+    if (theSun) return theSun;
+    const el = window.SUN_EARTH, rows = window.SUN_ROWS, toRgb = window.SUN_XYZ_TO_RGB;
+    if (!el || !rows || !toRgb || !window.SUN_LIGHT || !window.SUN_SKY) return null;
+    const RAD = Math.PI / 180, eps = window.SUN_OBLIQUITY * RAD;
+    const sinLat = Math.sin(BAY_LAT * RAD), cosLat = Math.cos(BAY_LAT * RAD);
+
+    // Where the Sun is at a moment (ms since 1970): degrees above the horizon, before the air lifts
+    // it, and degrees round from north through east. The Earth's orbit by JPL's elements (as in
+    // stars.js), seen from the other end, then moved on from J2000's equinox to the equinox of the
+    // day by the precession in longitude (5028.796195" a century, IAU 2006), as the sidereal time
+    // that turns it into the local sky is reckoned from that.
+    function at(ms) {
+      const days = ms / 86400000 + 2440587.5 - 2451545, T = days / 36525;
+      const [a, e, I, L, peri, node] = [0, 1, 2, 3, 4, 5].map((i) => el[i] + el[i + 6] * T);
+      const M = ((((L - peri) % 360) + 540) % 360 - 180) * RAD;
+      let E = M + e * Math.sin(M);
+      for (let k = 0; k < 6; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+      const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+      const w = (peri - node) * RAD, O = node * RAD, i = I * RAD;
+      const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), ci = Math.cos(i), si = Math.sin(i);
+      const x0 = -((cw * cO - sw * sO * ci) * xp + (-sw * cO - cw * sO * ci) * yp);
+      const y0 = -((cw * sO + sw * cO * ci) * xp + (-sw * sO + cw * cO * ci) * yp);
+      const z = -(sw * si * xp + cw * si * yp);
+      const p = (5028.796195 / 3600) * T * RAD, x = x0 * Math.cos(p) - y0 * Math.sin(p), y = x0 * Math.sin(p) + y0 * Math.cos(p);
+      const ye = Math.cos(eps) * y - Math.sin(eps) * z, ze = Math.sin(eps) * y + Math.cos(eps) * z;
+      const ra = Math.atan2(ye, x), dec = Math.atan2(ze, Math.hypot(x, ye));
+      const ha = (280.46061837 + 360.98564736629 * days + BAY_LON) * RAD - ra;   // as stars.js's lstAt
+      const sd = Math.sin(dec), cd = Math.cos(dec), ch = Math.cos(ha);
+      return {
+        alt: Math.asin(sd * sinLat + cd * cosLat * ch) / RAD,
+        az: Math.atan2(-cd * Math.sin(ha), sd * cosLat - cd * sinLat * ch) / RAD,
+      };
+    }
+    // Which row of the tables, and how far on toward the next, for the Sun at h degrees.
+    const last = rows.length - 1;
+    function rowOf(h) {
+      if (h <= rows[0]) return [0, 0];
+      if (h >= rows[last]) return [last - 1, 1];
+      let i = 0;
+      while (rows[i + 1] <= h) i++;
+      return [i, (h - rows[i]) / (rows[i + 1] - rows[i])];
+    }
+    // A colour as CIE xy at luminance Y, in linear sRGB.
+    function rgbOf(x, y, Y = 1) {
+      const X = (x / y) * Y, Z = ((1 - x - y) / y) * Y;
+      return toRgb.map((r) => r[0] * X + r[1] * Y + r[2] * Z);
+    }
+    // The light on a wall facing the Sun, with it at h degrees: [in the sun, in shadow], in linear
+    // sRGB at a luminance of 1. In shadow it's lit by the sky alone.
+    function light(h) {
+      const [i, t] = rowOf(h), a = window.SUN_LIGHT[i], b = window.SUN_LIGHT[i + 1];
+      const v = a.map((x, k) => x + (b[k] - x) * t);
+      return [rgbOf(v[0], v[1]), rgbOf(v[2], v[3])];
+    }
+    // The sky with the Sun at h degrees: a function of a direction's altitude and its angle round
+    // from the Sun (degrees), filling `out` with [log10 of its luminance in cd/m2, CIE x, CIE y].
+    const bytes = Uint8Array.from(atob(window.SUN_SKY), (c) => c.charCodeAt(0));
+    const ALT = window.SUN_SKY_ALT, AZ = window.SUN_SKY_AZ, RANGE = window.SUN_SKY_RANGE;
+    const cells = ALT.length * AZ.length;
+    const where = (list, v) => {
+      v = Math.min(Math.max(v, list[0]), list[list.length - 1]);
+      let i = 0;
+      while (i < list.length - 2 && list[i + 1] <= v) i++;
+      return [i, (v - list[i]) / (list[i + 1] - list[i])];
+    };
+    function sky(h) {
+      const [i, t] = rowOf(h), slice = new Float32Array(cells * 3);
+      for (let k = 0; k < cells * 3; k++) {
+        const [lo, hi] = RANGE[k % 3], a = bytes[i * cells * 3 + k], b = bytes[(i + 1) * cells * 3 + k];
+        slice[k] = lo + ((hi - lo) * (a + (b - a) * t)) / 255;
+      }
+      const n = AZ.length;
+      return (alt, round, out) => {
+        const [j, u] = where(ALT, alt), [k, v] = where(AZ, round);
+        for (let c = 0; c < 3; c++) {
+          const p = (jj, kk) => slice[(jj * n + kk) * 3 + c];
+          out[c] = (p(j, k) * (1 - v) + p(j, k + 1) * v) * (1 - u) + (p(j + 1, k) * (1 - v) + p(j + 1, k + 1) * v) * u;
+        }
+        return out;
+      };
+    }
+    // sRGB's curve between light and the numbers on screen (IEC 61966-2-1), each way.
+    const encode = (v) => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+    const decode = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    theSun = { at, light, sky, rgbOf, encode, decode, now: shownNow };
+    return theSun;
+  }
+
+  /* ==========================================================
      Still layers: pictures painted once and handed to the browser as plain elements,
      so it can show (and animate) them without any redrawing.
      ========================================================== */
@@ -1210,15 +1311,17 @@
     el.hidden = false;
     return el;
   }
-  // Show a canvas as an element's background.
-  function showCanvas(el, c) {
+  // Show a canvas as an element's background, or as its mask: the element's own background colour
+  // showing through wherever the canvas is painted.
+  function showCanvas(el, c, asMask) {
     el.__art = c;
     if (!c.toBlob) return;
     c.toBlob((blob) => {
       if (!blob) return;
       if (el.dataset.url) URL.revokeObjectURL(el.dataset.url);
       el.dataset.url = URL.createObjectURL(blob);
-      el.style.backgroundImage = `url(${el.dataset.url})`;
+      if (asMask) el.style.webkitMaskImage = el.style.maskImage = `url(${el.dataset.url})`;
+      else el.style.backgroundImage = `url(${el.dataset.url})`;
     });
   }
   function canvasAt(cw, ch, scale) {
@@ -1245,6 +1348,9 @@
      Sunlight: soft shadows of leaves on a pale wall, swaying in a breeze.
      Three layers of foliage at different distances from the wall: the further away, the softer
      the shadow. Each layer is painted once; the swaying is a CSS animation, so it's free to run.
+     The light is the Bay Area's real sunlight at this moment (sun.js): near white with the Sun
+     high, golden as it gets low, peach as it sets, then the blue of dusk. The shadows take the
+     colour of the skylight that fills them.
      ========================================================== */
   function Sunlight() {
     const SHAPES = leafShapes();
@@ -1255,8 +1361,36 @@
       { blur: 20, size: 1.0, count: 7, k: 0.09 },
       { blur: 10, size: 0.8, count: 5, k: 0.15 },
     ];
-    const SHADOW = 'rgb(70,72,78)';
+    const SHADOW = 'rgb(70,72,78)';                       // only the shape counts: the layers are masks
     let host = null;
+
+    // The page's own colours (style.css) are the wall in the light of a Sun NOON degrees up. Every
+    // other moment is shown against that, TINT of the way, as the eye half gets used to the colour
+    // of the light it's in (picked by eye). At night there's no sunlight left to colour the wall,
+    // so it eases back to its own colours as the Sun goes from 6 to 12 degrees down.
+    const WALL = [241, 239, 234], GLOW = [255, 249, 238], SHADE = [70, 72, 78];
+    const NOON = 60, TINT = 0.7;
+    const TINTED = ['--ground', '--sun-glow', '--sun-shadow'];
+    const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];   // sRGB's luminance
+    let tintTimer = 0;
+    function tint() {
+      const sun = sunKit();
+      if (!sun) return;
+      const h = sun.at(sun.now()).alt;
+      const [lit, shade] = sun.light(h), [lit0, shade0] = sun.light(NOON);
+      const k = TINT * (1 - smooth((-6 - h) / 6));
+      // A colour in this light: each channel scaled by how the light differs from NOON's, keeping
+      // its brightness, since the wall is shown as bright as ever (the way the eye adjusts to dusk).
+      const inLight = (base, now, then) => {
+        const lin = base.map((v) => sun.decode(v / 255));
+        const t = lin.map((v, i) => v * Math.pow(Math.max(1e-3, now[i]) / Math.max(1e-3, then[i]), k));
+        const s = luma(lin) / luma(t);
+        return t.map((v) => Math.round(255 * sun.encode(Math.min(1, Math.max(0, v * s))))).join(' ');
+      };
+      root.style.setProperty('--ground', `rgb(${inLight(WALL, lit, lit0)})`);
+      root.style.setProperty('--sun-glow', inLight(GLOW, lit, lit0));
+      root.style.setProperty('--sun-shadow', `rgb(${inLight(SHADE, shade, shade0)})`);
+    }
 
     // Fill a set of shapes as one soft shadow: drawn far off-canvas, only the blurred shadow lands.
     function softFill(g, scale, blur, paint) {
@@ -1323,7 +1457,12 @@
 
     return {
       fps: 0,
-      colors() {},
+      colors() {
+        tint();
+        // The Sun moves a quarter of a degree a minute: twice a minute is plenty.
+        clearInterval(tintTimer);
+        tintTimer = setInterval(tint, 30000);
+      },
       resize() {
         host = layerElement('sun-layers', LAYERS.length);
         // Each layer overhangs the screen so its slow sway never shows an edge,
@@ -1336,7 +1475,7 @@
           el.style.left = `${-M}px`; el.style.top = `${-M}px`;
           el.style.width = `${w + M * 2}px`; el.style.height = `${h + M * 2 + extra}px`;
           const c = paintLayer(L, M, extra);
-          showCanvas(el, c);
+          showCanvas(el, c, true);
           host.__layers.push({ c, M, k: L.k });
         });
         follow();
@@ -1345,7 +1484,11 @@
       onScroll: follow,
       update() {},
       draw() { ctx.clearRect(0, 0, w, h); },
-      leave() { if (host) host.hidden = true; },
+      leave() {
+        if (host) host.hidden = true;
+        clearInterval(tintTimer);
+        for (const name of TINTED) root.style.removeProperty(name);
+      },
     };
   }
 
@@ -1824,25 +1967,30 @@
     sunlight: Sunlight,
     winter: Winter,
   };
-  // Scenes kept in their own files, fetched the first time they're picked. Stars needs the star
-  // catalog (sky.js), the Moon's and planets' motions (orbits.js) and the meteor showers (meteors.js),
-  // which no other background uses.
-  const LATER = { stars: ['sky.js', 'orbits.js', 'meteors.js', 'stars.js'] };
-  const fetching = {};
+  // Files a scene needs, fetched the first time it's picked. Stars is kept in its own file with the
+  // star catalog (sky.js), the Moon's and planets' motions (orbits.js) and the meteor showers
+  // (meteors.js), which no other background uses. Stars and Sunlight both take their light from
+  // where the Sun is (sun.js).
+  const NEEDS = { stars: ['sky.js', 'orbits.js', 'meteors.js', 'sun.js', 'stars.js'], sunlight: ['sun.js'] };
+  const loading = {}, ready = {};
+  const load = (src) => (loading[src] = loading[src] || new Promise((done, fail) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = done;
+    script.onerror = () => { delete loading[src]; fail(new Error(`couldn't load ${src}`)); };
+    document.head.appendChild(script);
+  }));
   function fetchScene(name) {
-    fetching[name] = fetching[name] || Promise.all(LATER[name].map((src) => new Promise((done, fail) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = done;
-      script.onerror = () => { delete fetching[name]; fail(new Error(`couldn't load ${src}`)); };
-      document.head.appendChild(script);
-    }))).then(() => { SCENES[name] = window.laterScenes[name]; });
-    return fetching[name];
+    return Promise.all(NEEDS[name].map(load)).then(() => {
+      ready[name] = true;
+      if (window.laterScenes && window.laterScenes[name]) SCENES[name] = window.laterScenes[name];
+    });
   }
   // What a scene in its own file gets to work with (see stars.js).
   const kit = {
     ctx, TAU, quiet, makeSprite, rgba, scrollRoom,
     get w() { return w; }, get h() { return h; }, get scroll() { return scroll; }, get text() { return text; },
+    get sun() { return sunKit(); },
     redraw() { dirty = true; },
   };
   // Shown while a scene is still on its way: nothing.
@@ -1869,11 +2017,17 @@
   }
 
   function use(name) {
-    if (!SCENES[name] && !LATER[name]) name = 'life';
+    if (!SCENES[name] && !NEEDS[name]) name = 'life';
     wanted = name;
-    if (!SCENES[name]) {
-      // Keep the current scene up until this one arrives, unless another is picked meanwhile.
-      fetchScene(name).then(() => { if (wanted === name) use(name); }, () => { if (wanted === name) use('life'); });
+    if (NEEDS[name] && !ready[name]) {
+      // Keep the current scene up until this one's files arrive, unless another is picked meanwhile.
+      // If they don't, a scene that lives here runs without them (Sunlight, untinted); one that
+      // doesn't falls back to Life.
+      const fallBack = () => {
+        if (wanted !== name) return;
+        if (SCENES[name]) { ready[name] = true; use(name); } else use('life');
+      };
+      fetchScene(name).then(() => { if (wanted === name) use(name); }, fallBack);
       return;
     }
     if (scene.leave) scene.leave();
@@ -1940,7 +2094,7 @@
   const BY_SEASON = { winter: 'winter', spring: 'garden', summer: 'sunlight', autumn: 'autumn' };
   function chosen() {
     const asked = new URLSearchParams(location.search).get('bg');
-    if (SCENES[asked] || LATER[asked]) return asked;
+    if (SCENES[asked] || NEEDS[asked]) return asked;
     const configured = (window.SITE && window.SITE.background) || 'season';
     return configured === 'season' ? BY_SEASON[root.dataset.season] || 'life' : configured;
   }
@@ -1974,5 +2128,7 @@
     lastFrame = performance.now();
     requestAnimationFrame(loop);
   }
+  // Start fetching the first scene's files now, while the fonts load.
+  if (NEEDS[chosen()]) fetchScene(chosen()).catch(() => {});
   (document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(start);
 })();
