@@ -4,15 +4,18 @@
 #   python3 tools/pack_sky.py build sky-data public/sky.js
 #
 # Sources (all numbers in sky.js come from these; nothing is typed in by hand):
-#   Stars       Yale Bright Star Catalog, 5th revised ed. (Hoffleit & Warren 1991): position, magnitude, colour
+#   Stars       Yale Bright Star Catalog, 5th revised ed. (Hoffleit & Warren 1991): position, magnitude, colour,
+#               spectral type
 #   Distances   Hipparcos, the new reduction (van Leeuwen 2007, VizieR I/311): parallax and its error
-#   Cross-match HYG database v4.1 (astronexus, CC BY-SA 4.0): which Hipparcos star each catalog star is
+#   Cross-match HYG database v4.1 (astronexus, CC BY-SA 4.0): which Hipparcos star each catalog star is,
+#               and which constellation it's in
 #   Star names  IAU Catalog of Star Names (IAU Working Group on Star Names)
 #   Objects     OpenNGC (Mattia Verga, CC BY-SA 4.0): position, size, shape, angle, type, common name
 #   Their dist. Wikidata, "distance from Earth" (P2583): the preferred value, else the median of those listed
 #   Faint stars HYG v4.1 again: the stars between the catalog's limit and the eye's (magnitude 6.5)
 #   Milky Way   Milky Way Outline Catalog (Jose R. Vieira), five brightness levels, as packaged in
 #               d3-celestial (Olaf Frohn, BSD 3-clause)
+#   Constellations  their names, from d3-celestial too
 
 import bisect
 import csv
@@ -49,6 +52,7 @@ SOURCES = {
     'NGC.csv': 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/NGC.csv',
     'addendum.csv': 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/database_files/addendum.csv',
     'mw.json': 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/mw.json',
+    'constellations.json': 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.json',
 }
 UA = {'User-Agent': 'pack-sky/1.0 (static site data build)'}
 
@@ -204,10 +208,12 @@ def build(folder, out):
         parts = line.rstrip('\n').split('\t')
         if len(parts) == 3 and parts[0].strip().isdigit():
             parallax[int(parts[0])] = (float(parts[1]), float(parts[2]))
-    hip_of, hyg = {}, []
+    hip_of, con_of, hyg = {}, {}, []
     for r in csv.DictReader(open(os.path.join(folder, 'hygdata_v41.csv'), encoding='utf-8')):
         if r['hr'] and r['hip']:
             hip_of[int(float(r['hr']))] = int(float(r['hip']))
+        if r['hr'] and r['con']:
+            con_of[int(float(r['hr']))] = r['con']
         hyg.append(r)
     by_hip, by_hr = star_names(folder)
 
@@ -229,7 +235,7 @@ def build(folder, out):
             rows.append((mag, ra, dec, bv, hr, line))
     rows.sort(key=lambda r: r[0])
 
-    nums, names, stats = [], [], dict(proper=0, distance=0)
+    nums, names, types, stats = [], [], [], dict(proper=0, distance=0)
     for mag, ra, dec, bv, hr, line in rows:
         hip = hip_of.get(hr)
         ly = 0
@@ -240,6 +246,7 @@ def build(folder, out):
         if mag <= LABELLED:
             proper = by_hip.get(hip) or by_hr.get(hr)
             names.append(proper or designation(line))
+            types.append([line[127:147].strip(), con_of.get(hr) or line[11:14].strip()])
             stats['proper'] += bool(proper)
             stats['distance'] += bool(ly)
         nums += [round(ra * 100), round(dec * 100), round(mag * 100), round(bv * 100), round(ly * 10)]
@@ -256,6 +263,7 @@ def build(folder, out):
             faint += [round(float(r['ra']) * 150), round(dec * 10), round(mag * 10), round(bv * 10)]
 
     milky = milky_way_grid(folder)
+    constellations = constellation_names(folder, {con for _, con in types})
 
     distances = object_distances(folder)
     objects = []
@@ -274,6 +282,11 @@ def build(folder, out):
         f.write('window.SKY_STARS = [' + ','.join(map(str, nums)) + '];\n')
         f.write(f'// SKY_NAMES: names for the first {len(names)} stars, the ones bright enough to hover.\n')
         f.write('window.SKY_NAMES = ' + json.dumps(names, ensure_ascii=False, separators=(',', ':')) + ';\n')
+        f.write('// SKY_TYPES: for the same stars, the spectral type as the Bright Star Catalog gives it, and the\n')
+        f.write('// constellation (IAU abbreviation) HYG puts it in. SKY_CONSTELLATIONS: those abbreviations\' names.\n')
+        f.write('window.SKY_TYPES = ' + json.dumps(types, ensure_ascii=False, separators=(',', ':')) + ';\n')
+        f.write('window.SKY_CONSTELLATIONS = ' + json.dumps(constellations, ensure_ascii=False,
+                                                         separators=(',', ':')) + ';\n')
         f.write('// SKY_OBJECTS: name, RA, Dec (J2000, degrees), kind, major axis (degrees), minor/major,\n')
         f.write('// position angle (degrees east of north), distance (light years; 0 unknown), catalog id.\n')
         f.write('window.SKY_OBJECTS = [\n')
@@ -350,6 +363,19 @@ def milky_way_grid(folder):
         else:
             runs += [v, 1]
     return runs
+
+
+def constellation_names(folder, used):
+    """Each constellation's name by its abbreviation. d3-celestial lists Serpens as its two halves
+    (Serpens Caput, Serpens Cauda); a star's abbreviation doesn't say which, so it gets the first word."""
+    found = {}
+    for f in json.load(open(os.path.join(folder, 'constellations.json'), encoding='utf-8'))['features']:
+        found.setdefault(f['id'], []).append(f['properties']['name'])
+    names = {}
+    for code in sorted(used):
+        parts = found[code]
+        names[code] = parts[0] if len(parts) == 1 else parts[0].split()[0]
+    return names
 
 
 def designation(line):

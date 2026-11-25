@@ -461,13 +461,14 @@
     // The catalog stars (sky.js).
     const data = window.SKY_STARS || [];
     const names = window.SKY_NAMES || [];
+    const types = window.SKY_TYPES || [];
     const sky = [];
     for (let i = 0; i + 4 < data.length; i += 5) {
       const mag = data[i + 2] / 100, tint = bvTint(data[i + 3] / 100);
       const t = Math.max(0, Math.min(1, (5.5 - mag) / 7)); // 0 at the faintest, about 1 for Sirius
       const faint = mag > 4.5;
       sky.push(at(data[i] / 100, data[i + 1] / 100, {
-        faint, tint, name: names[i / 5] || '', ly: data[i + 4] / 10,
+        faint, tint, name: names[i / 5] || '', ly: data[i + 4] / 10, type: types[i / 5],
         size: faint ? 0.7 + t * 4 : 3.5 + Math.pow(t, 1.4) * 26,
         base: faint ? 0.35 + t * 3 : 0.7 + t * 0.3,
         glow: glows[tint], spike: mag < 2 ? spikes[tint] : null,
@@ -879,6 +880,22 @@
       const era = left < 0 ? `${-left} BC` : left < 1000 ? `${left} AD` : `${left}`;
       return `Light left ${step === 1 ? 'in' : 'around'} ${era} · ${far} light years`;
     }
+    // What a star is, from its spectral type and constellation (sky.js): "Red supergiant in Orion".
+    // The class letter gives its colour and the luminosity class its size. Only the first star of
+    // a pair counts ("G5IIIe+G0III"), and a dwarf (class V) is just a star, as "white dwarf" means
+    // something else.
+    const COLOURS = { O: 'Blue', B: 'Blue-white', A: 'White', F: 'Yellow-white', G: 'Yellow', K: 'Orange', M: 'Red', S: 'Red', C: 'Red' };
+    const SIZES = { I: 'supergiant', II: 'bright giant', III: 'giant', IV: 'subgiant' };
+    function whatStar(type) {
+      if (!type) return '';
+      const [spectrum, con] = type;
+      const where = (window.SKY_CONSTELLATIONS || {})[con];
+      const first = spectrum.split(/\+(?=[OBAFGKMW])/)[0];
+      const size = (first.slice(1).match(/III|II|IV|VI|V|I/) || [])[0];
+      const what = first[0] === 'W' ? 'Wolf-Rayet star'
+        : COLOURS[first[0]] ? `${COLOURS[first[0]]} ${SIZES[size] || 'star'}` : '';
+      return what && where ? `${what} in ${where}` : what || (where ? `In ${where}` : '');
+    }
     // For the Moon and the planets, sunlight they send back: how long ago it left them, and how far.
     function lightFrom(km) {
       const s = km / LIGHT_KM_S;
@@ -899,7 +916,7 @@
     let labelText = '';
     function fill(item) {
       const lines = [item.name, ...(item.moon ? [phaseOf(item), lightFrom(item.km)]
-        : item.planet ? [lightFrom(item.au * AU_KM)] : [whenLeft(item.ly)])].filter(Boolean);
+        : item.planet ? [lightFrom(item.au * AU_KM)] : [whatStar(item.type), whenLeft(item.ly)])].filter(Boolean);
       if (lines.join('\n') === labelText) return;
       labelText = lines.join('\n');
       label.textContent = lines[0];
